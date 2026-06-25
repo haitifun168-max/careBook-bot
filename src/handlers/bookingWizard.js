@@ -454,13 +454,21 @@ module.exports = (bot) => {
         }
 
         if (session.state === 'WAITING_PATIENT_PHONE') {
+            // Clean all spaces, dashes, dots, and +
+            let phoneInput = text.replace(/[\s\-\.\+]/g, '');
+
+            // Auto-prepend '0' if user entered a 9-digit number not starting with '0'
+            if (phoneInput.length === 9 && !phoneInput.startsWith('0') && !phoneInput.startsWith('84')) {
+                phoneInput = '0' + phoneInput;
+            }
+
             // Simple regex validate: starts with 0 or 84, followed by 9 to 10 digits
             const phoneRegex = /^(0|84)\d{9,10}$/;
-            if (!phoneRegex.test(text)) {
+            if (!phoneRegex.test(phoneInput)) {
                 return ctx.reply('❌ Số điện thoại không hợp lệ. Vui lòng nhập số điện thoại gồm 10 chữ số (Ví dụ: 0912345678):');
             }
             
-            let phone = text;
+            let phone = phoneInput;
             if (phone.startsWith('84')) phone = '0' + phone.substring(2);
 
             session.patientPhone = phone;

@@ -32,7 +32,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
         });
     }
 
-    const cleanText = text.trim();
+    const cleanText = String(text).trim();
     const normalizedText = cleanText.toLowerCase();
 
     // Global cancellation handler
@@ -344,13 +344,21 @@ async function handleZaloMessage(chatId, text, fromUser) {
 
     // State 6: WAITING_PATIENT_PHONE
     if (session.state === 'WAITING_PATIENT_PHONE') {
+        // Clean all spaces, dashes, dots, and +
+        let phoneInput = cleanText.replace(/[\s\-\.\+]/g, '');
+
+        // Auto-prepend '0' if user entered a 9-digit number not starting with '0'
+        if (phoneInput.length === 9 && !phoneInput.startsWith('0') && !phoneInput.startsWith('84')) {
+            phoneInput = '0' + phoneInput;
+        }
+
         // Match 10 to 11 digits format
         const phoneRegex = /^(0|84)\d{9,10}$/;
-        if (!phoneRegex.test(cleanText)) {
+        if (!phoneRegex.test(phoneInput)) {
             return zaloBotService.sendMessage(chatId, '❌ Số điện thoại không hợp lệ. Vui lòng nhập đúng 10 số (Ví dụ: 0912345678):');
         }
 
-        let phone = cleanText;
+        let phone = phoneInput;
         if (phone.startsWith('84')) phone = '0' + phone.substring(2);
         session.patientPhone = phone;
 
