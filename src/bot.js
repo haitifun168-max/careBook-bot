@@ -85,8 +85,8 @@ const runStartupTasks = () => {
     });
 };
 
-// Check if PUBLIC_URL is configured (Render/Production webhook mode)
-if (config.PUBLIC_URL && config.PUBLIC_URL !== 'your_public_url_here') {
+// Check if PUBLIC_URL is configured and starts with https:// (Render/Production webhook mode)
+if (config.PUBLIC_URL && config.PUBLIC_URL.startsWith('https://')) {
     const telegramSecretPath = `/webhook/telegram-${config.BOT_TOKEN.slice(0, 10)}`;
     const webhookUrl = `${config.PUBLIC_URL.replace(/\/$/, '')}${telegramSecretPath}`;
     

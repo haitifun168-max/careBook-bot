@@ -3,7 +3,7 @@ require('dotenv').config();
 module.exports = {
     BOT_TOKEN: process.env.BOT_TOKEN,
     ADMIN_ID: parseInt(process.env.ADMIN_ID) || 0,
-    PUBLIC_URL: process.env.PUBLIC_URL || 'http://localhost:3000',
+    PUBLIC_URL: process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000',
 
     // Bank config for VietQR
     BANK: {
