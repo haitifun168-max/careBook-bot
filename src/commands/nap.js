@@ -3,6 +3,7 @@ const messages = require('../utils/messages');
 const { formatPrice } = require('../utils/keyboard');
 const userService = require('../services/userService');
 const db = require('../database');
+const config = require('../config');
 
 const napSessions = {};
 
@@ -21,6 +22,9 @@ module.exports = (bot) => {
         db.prepare('INSERT INTO deposits (user_id, amount, payment_code) VALUES (?, ?, ?)')
           .run(ctx.from.id, amount, payment.paymentCode);
 
+        const cleanPrefix = (config.PAYMENT_PREFIX || 'CB').replace(/[-\s]/g, '');
+        const staticCode = `${cleanPrefix}${paymentService.encryptUserId(ctx.from.id)}`;
+
         // Send QR image
         ctx.replyWithPhoto(payment.qrUrl, {
             caption:
@@ -29,7 +33,9 @@ module.exports = (bot) => {
                 `🏦 Quét mã QR để chuyển khoản\n` +
                 `├ Số tiền: <b>${formatPrice(amount)}</b>\n` +
                 `└ Nội dung CK: <code>${payment.paymentCode}</code>\n\n` +
-                `⏳ Sau khi chuyển khoản, số dư sẽ được cập nhật tự động.`,
+                `⏳ Sau khi chuyển khoản, số dư sẽ được cập nhật tự động.\n\n` +
+                `💡 <i>Mẹo: Bạn cũng có thể chuyển khoản tự do với cú pháp tĩnh bất kỳ lúc nào (không cần gõ lệnh nạp):</i>\n` +
+                `🔑 Nội dung CK tĩnh: <code>${staticCode}</code>`,
             parse_mode: 'HTML',
         });
     };

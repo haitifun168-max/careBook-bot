@@ -17,9 +17,18 @@ const activeTempTokens = {};
 
 function extractPaymentCode(content) {
     if (!content) return null;
-    const match = content.match(/NAP\s*PAY\s*-?\s*([A-Z0-9]{6})/i);
+    const prefix = config.PAYMENT_PREFIX || 'CB';
+    const escapedPrefix = prefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`(?:${escapedPrefix}|NAP\\s*PAY)\\s*-?\\s*([A-Z0-9]{6,20})`, 'i');
+    const match = content.match(regex);
     if (match) {
-        return `NAP PAY-${match[1].toUpperCase()}`;
+        // Lấy chính xác tiền tố mà người dùng đã nhập để phản hồi khớp với database
+        const matchedPrefix = content.substring(match.index, match.index + match[0].indexOf(match[1])).trim().replace(/\s*-?\s*$/, '');
+        const normalizedPrefix = matchedPrefix.toUpperCase().replace(/\s+/g, ' ');
+        if (normalizedPrefix === 'NAP PAY') {
+            return `NAP PAY-${match[1].toUpperCase()}`;
+        }
+        return `${normalizedPrefix}${match[1].toUpperCase()}`;
     }
     return null;
 }
@@ -149,17 +158,33 @@ function startWebhookServer(bot) {
                         const recoveredAppt = appointmentService.getById(appointment.id);
 
                         try {
-                            await bot.telegram.sendMessage(
-                                appointment.user_id,
-                                `⚠️ <b>LỊCH HẸN ĐẶT CỌC TRỄ ĐÃ KHÔI PHỤC!</b>\n\n` +
-                                `Mã lịch: <b>#${appointment.id}</b>\n` +
-                                `🩺 Dịch vụ: <b>${appointment.package_name}</b>\n` +
-                                `📅 Ngày khám: <b>${appointment.booking_date}</b>\n` +
-                                `⏱️ Khung giờ: <b>${appointment.booking_time}</b>\n` +
-                                `💵 Tiền cọc đã nhận: <b>${new Intl.NumberFormat('vi-VN').format(amount)}đ</b>\n\n` +
-                                `💬 <i>Lưu ý: Hệ thống nhận được tiền cọc trễ hạn của bạn sau 15 phút, tuy nhiên khung giờ này vẫn còn trống nên lịch khám của bạn đã được khôi phục thành công trên hệ thống và đồng bộ Google Calendar phòng khám.</i>`,
-                                { parse_mode: 'HTML' }
-                            );
+                            const isZalo = String(appointment.user_id).length >= 12;
+                            if (isZalo) {
+                                const zaloBotService = require('./zaloBotService');
+                                await zaloBotService.sendMessage(
+                                    String(appointment.user_id),
+                                    `⚠️ <b>LỊCH HẸN ĐẶT CỌC TRỄ ĐÃ KHÔI PHỤC!</b>\n\n` +
+                                    `Mã lịch: <b>#${appointment.id}</b>\n` +
+                                    `🩺 Dịch vụ: <b>${appointment.package_name}</b>\n` +
+                                    `📅 Ngày khám: <b>${appointment.booking_date}</b>\n` +
+                                    `⏱️ Khung giờ: <b>${appointment.booking_time}</b>\n` +
+                                    `💵 Tiền cọc đã nhận: <b>${new Intl.NumberFormat('vi-VN').format(amount)}đ</b>\n\n` +
+                                    `💬 <i>Lưu ý: Hệ thống nhận được tiền cọc trễ hạn của bạn sau 15 phút, tuy nhiên khung giờ này vẫn còn trống nên lịch khám của bạn đã được khôi phục thành công trên hệ thống và đồng bộ Google Calendar phòng khám.</i>`,
+                                    'html'
+                                );
+                            } else {
+                                await bot.telegram.sendMessage(
+                                    appointment.user_id,
+                                    `⚠️ <b>LỊCH HẸN ĐẶT CỌC TRỄ ĐÃ KHÔI PHỤC!</b>\n\n` +
+                                    `Mã lịch: <b>#${appointment.id}</b>\n` +
+                                    `🩺 Dịch vụ: <b>${appointment.package_name}</b>\n` +
+                                    `📅 Ngày khám: <b>${appointment.booking_date}</b>\n` +
+                                    `⏱️ Khung giờ: <b>${appointment.booking_time}</b>\n` +
+                                    `💵 Tiền cọc đã nhận: <b>${new Intl.NumberFormat('vi-VN').format(amount)}đ</b>\n\n` +
+                                    `💬 <i>Lưu ý: Hệ thống nhận được tiền cọc trễ hạn của bạn sau 15 phút, tuy nhiên khung giờ này vẫn còn trống nên lịch khám của bạn đã được khôi phục thành công trên hệ thống và đồng bộ Google Calendar phòng khám.</i>`,
+                                    { parse_mode: 'HTML' }
+                                );
+                            }
                         } catch (err) {
                             console.error('Failed to notify customer of recovered appointment:', err.message);
                         }
@@ -188,18 +213,35 @@ function startWebhookServer(bot) {
                         const formattedPrice = new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
                         const totalBalance = new Intl.NumberFormat('vi-VN').format(updatedUser.balance) + 'đ';
 
+                        const isZalo = String(appointment.user_id).length >= 12;
+
                         try {
-                            await bot.telegram.sendMessage(
-                                appointment.user_id,
-                                `❌ <b>HỦY LỊCH HẸN & HOÀN CỌC VÀO VÍ</b>\n\n` +
-                                `Hệ thống nhận được khoản chuyển khoản cọc trễ hạn của bạn cho lịch hẹn cũ:\n` +
-                                `🩺 Dịch vụ: ${appointment.package_name}\n` +
-                                `📅 Thời gian: ${appointment.booking_time} ngày ${appointment.booking_date}\n\n` +
-                                `⚠️ Do lịch hẹn đã quá hạn 15 phút và khung giờ này hiện đã được bệnh nhân khác đăng ký trước. Vì vậy, số tiền cọc <b>${formattedPrice}</b> đã được <b>hoàn tự động vào ví tích điểm</b> của bạn.\n` +
-                                `💵 Số dư ví tích điểm hiện tại: <b>${totalBalance}</b>.\n` +
-                                `👉 Bạn có thể dùng số dư ví này để đặt lịch hẹn mới ngay lập tức mà không cần quét mã chuyển khoản lại.`,
-                                { parse_mode: 'HTML' }
-                            );
+                            if (isZalo) {
+                                const zaloBotService = require('./zaloBotService');
+                                await zaloBotService.sendMessage(
+                                    String(appointment.user_id),
+                                    `❌ <b>HỦY LỊCH HẸN & HOÀN CỌC VÀO VÍ</b>\n\n` +
+                                    `Hệ thống nhận được khoản chuyển khoản cọc trễ hạn của bạn cho lịch hẹn cũ:\n` +
+                                    `🩺 Dịch vụ: ${appointment.package_name}\n` +
+                                    `📅 Thời gian: ${appointment.booking_time} ngày ${appointment.booking_date}\n\n` +
+                                    `⚠️ Do lịch hẹn đã quá hạn 15 phút và khung giờ này hiện đã được bệnh nhân khác đăng ký trước. Vì vậy, số tiền cọc <b>${formattedPrice}</b> đã được <b>hoàn tự động vào ví tích điểm</b> của bạn.\n` +
+                                    `💵 Số dư ví tích điểm hiện tại: <b>${totalBalance}</b>.\n` +
+                                    `👉 Bạn có thể dùng số dư ví này để đặt lịch hẹn mới ngay lập tức mà không cần quét mã chuyển khoản lại.`,
+                                    'html'
+                                );
+                            } else {
+                                await bot.telegram.sendMessage(
+                                    appointment.user_id,
+                                    `❌ <b>HỦY LỊCH HẸN & HOÀN CỌC VÀO VÍ</b>\n\n` +
+                                    `Hệ thống nhận được khoản chuyển khoản cọc trễ hạn của bạn cho lịch hẹn cũ:\n` +
+                                    `🩺 Dịch vụ: ${appointment.package_name}\n` +
+                                    `📅 Thời gian: ${appointment.booking_time} ngày ${appointment.booking_date}\n\n` +
+                                    `⚠️ Do lịch hẹn đã quá hạn 15 phút và khung giờ này hiện đã được bệnh nhân khác đăng ký trước. Vì vậy, số tiền cọc <b>${formattedPrice}</b> đã được <b>hoàn tự động vào ví tích điểm</b> của bạn.\n` +
+                                    `💵 Số dư ví tích điểm hiện tại: <b>${totalBalance}</b>.\n` +
+                                    `👉 Bạn có thể dùng số dư ví này để đặt lịch hẹn mới ngay lập tức mà không cần quét mã chuyển khoản lại.`,
+                                    { parse_mode: 'HTML' }
+                                );
+                            }
                         } catch (err) {
                             console.error('Failed to notify customer of automatic refund:', err.message);
                         }
@@ -208,7 +250,8 @@ function startWebhookServer(bot) {
                             const notifyMsg = 
                                 `💰 <b>HOÀN CỌC TỰ ĐỘNG (LỊCH TRỄ CỌC BỊ ĐẦY CHỖ)</b>\n\n` +
                                 `👤 Bệnh nhân: <b>${appointment.patient_name}</b>\n` +
-                                `🆔 Telegram ID: <code>${appointment.user_id}</code>\n` +
+                                `🆔 Kênh: <b>${isZalo ? 'Zalo' : 'Telegram'}</b>\n` +
+                                `🆔 ID: <code>${appointment.user_id}</code>\n` +
                                 `💵 Tiền cọc nhận: <b>${formattedPrice}</b>\n` +
                                 `💵 Trạng thái: Đã tự động hoàn vào ví tích điểm người dùng.\n` +
                                 `💵 Số dư ví mới: <b>${totalBalance}</b>`;
@@ -244,23 +287,35 @@ function startWebhookServer(bot) {
                 if (confirmResult.success) {
                     console.log(`✅ Webhook đã thanh toán cọc & xác nhận lịch hẹn #${appointment.id}`);
 
-                    // Notify customer via Telegram
+                    // Notify customer via Telegram / Zalo
                     try {
-                        await bot.telegram.sendMessage(
-                            appointment.user_id,
-                            messages.bookingSuccess(confirmResult.appointment, appointment.package_name),
-                            { parse_mode: 'HTML' }
-                        );
+                        const isZalo = String(appointment.user_id).length >= 12;
+                        if (isZalo) {
+                            const zaloBotService = require('./zaloBotService');
+                            await zaloBotService.sendMessage(
+                                String(appointment.user_id),
+                                messages.bookingSuccess(confirmResult.appointment, appointment.package_name),
+                                'html'
+                            );
+                        } else {
+                            await bot.telegram.sendMessage(
+                                appointment.user_id,
+                                messages.bookingSuccess(confirmResult.appointment, appointment.package_name),
+                                { parse_mode: 'HTML' }
+                            );
+                        }
                     } catch (err) {
                         console.error('Failed to notify customer about confirmed booking:', err.message);
                     }
 
                     // Notify Admin
                     try {
+                        const isZalo = String(appointment.user_id).length >= 12;
                         const notifyMsg = 
                             `✅ <b>LỊCH HẸN ĐÃ NHẬN CỌC #${appointment.id}</b>\n\n` +
                             `🩺 Dịch vụ: <b>${appointment.package_name}</b>\n` +
                             `👤 Bệnh nhân: <b>${appointment.patient_name}</b>\n` +
+                            `🆔 Kênh: <b>${isZalo ? 'Zalo' : 'Telegram'}</b>\n` +
                             `📅 Ngày khám: ${appointment.booking_date}\n` +
                             `⏱️ Khung giờ: ${appointment.booking_time}\n` +
                             `💵 Số tiền cọc: ${new Intl.NumberFormat('vi-VN').format(amount)}đ\n` +
@@ -277,7 +332,12 @@ function startWebhookServer(bot) {
             }
 
             // Check pending deposits if no appointment was found
-            const deposit = db.prepare("SELECT * FROM deposits WHERE payment_code = ? AND status = 'pending'").get(paymentCode);
+            const cleanCode = paymentCode.replace(/[-\s]/g, '').toUpperCase();
+            const deposit = db.prepare(`
+                SELECT * FROM deposits 
+                WHERE REPLACE(REPLACE(payment_code, '-', ''), ' ', '') = ? 
+                  AND status = 'pending'
+            `).get(cleanCode);
             
             if (deposit) {
                 // Complete deposit status
@@ -292,25 +352,39 @@ function startWebhookServer(bot) {
 
                 console.log(`✅ Webhook: Đã hoàn tất nạp số dư ví cho user ${deposit.user_id} | Số tiền: ${formattedPrice}`);
 
-                // Notify customer via Telegram
+                // Notify customer via Telegram / Zalo
                 try {
-                    await bot.telegram.sendMessage(
-                        deposit.user_id,
-                        `💰 <b>NẠP SỐ DƯ THÀNH CÔNG!</b>\n\n` +
-                        `Tài khoản ví của bạn đã được cộng thêm: <b>+${formattedPrice}</b>.\n` +
-                        `💵 Số dư ví tích điểm hiện tại: <b>${totalBalance}</b>.`,
-                        { parse_mode: 'HTML' }
-                    );
+                    const isZalo = String(deposit.user_id).length >= 12;
+                    if (isZalo) {
+                        const zaloBotService = require('./zaloBotService');
+                        await zaloBotService.sendMessage(
+                            String(deposit.user_id),
+                            `💰 <b>NẠP SỐ DƯ THÀNH CÔNG!</b>\n\n` +
+                            `Tài khoản ví của bạn đã được cộng thêm: <b>+${formattedPrice}</b>.\n` +
+                            `💵 Số dư ví tích điểm hiện tại: <b>${totalBalance}</b>.`,
+                            'html'
+                        );
+                    } else {
+                        await bot.telegram.sendMessage(
+                            deposit.user_id,
+                            `💰 <b>NẠP SỐ DƯ THÀNH CÔNG!</b>\n\n` +
+                            `Tài khoản ví của bạn đã được cộng thêm: <b>+${formattedPrice}</b>.\n` +
+                            `💵 Số dư ví tích điểm hiện tại: <b>${totalBalance}</b>.`,
+                            { parse_mode: 'HTML' }
+                        );
+                    }
                 } catch (err) {
                     console.error('Failed to notify customer of successful deposit:', err.message);
                 }
 
                 // Notify Admin
                 try {
+                    const isZalo = String(deposit.user_id).length >= 12;
                     const notifyMsg = 
                         `💰 <b>NẠP SỐ DƯ TỰ ĐỘNG THÀNH CÔNG</b>\n\n` +
                         `👤 Bệnh nhân: <b>${updatedUser.full_name || deposit.user_id}</b>\n` +
-                        `🆔 Telegram ID: <code>${deposit.user_id}</code>\n` +
+                        `🆔 Kênh: <b>${isZalo ? 'Zalo' : 'Telegram'}</b>\n` +
+                        `🆔 ID: <code>${deposit.user_id}</code>\n` +
                         `💵 Số tiền nạp: <b>${formattedPrice}</b>\n` +
                         `💵 Số dư ví hiện tại: <b>${totalBalance}</b>`;
                     await bot.telegram.sendMessage(config.ADMIN_ID, notifyMsg, { parse_mode: 'HTML' });
@@ -319,6 +393,92 @@ function startWebhookServer(bot) {
                 }
 
                 return res.json({ success: true, message: `Deposit for user ${deposit.user_id} completed` });
+            }
+
+            // Fallback for static ID deposits (both Telegram and Zalo)
+            // e.g. paymentCode is "CB-5PE61284DOFBI" or "NAP PAY-530718471553674179"
+            const staticIdPrefix = config.PAYMENT_PREFIX || 'CB';
+            const escapedStaticIdPrefix = staticIdPrefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const staticIdRegex = new RegExp(`^(?:${escapedStaticIdPrefix}|NAP\\s*PAY)\\s*-?\\s*([A-Z0-9]{6,20})$`, 'i');
+            const staticIdMatch = paymentCode.match(staticIdRegex);
+
+            if (staticIdMatch) {
+                const codeSuffix = staticIdMatch[1];
+                let targetUserIdStr = null;
+
+                // Nếu là thuần số thì là ID gốc chưa mã hóa (tương thích ngược hoặc debug)
+                if (/^\d+$/.test(codeSuffix)) {
+                    targetUserIdStr = codeSuffix;
+                } else {
+                    // Cố gắng giải mã từ mã hóa tĩnh Base36
+                    const paymentService = require('./paymentService');
+                    targetUserIdStr = paymentService.decryptUserId(codeSuffix);
+                }
+
+                if (targetUserIdStr) {
+                    const targetUserId = parseInt(targetUserIdStr) || 0;
+                    const user = userService.get(targetUserId);
+                    if (user) {
+                        // Create a completed deposit record
+                        db.prepare(`
+                            INSERT INTO deposits (user_id, amount, payment_code, status, completed_at)
+                            VALUES (?, ?, ?, 'completed', CURRENT_TIMESTAMP)
+                        `).run(targetUserId, amount, paymentCode);
+
+                        // Add balance
+                        userService.addBalance(targetUserId, amount);
+                        const updatedUser = userService.get(targetUserId);
+
+                        const formattedPrice = new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
+                        const totalBalance = new Intl.NumberFormat('vi-VN').format(updatedUser.balance) + 'đ';
+
+                        console.log(`✅ Webhook: Đã hoàn tất nạp số dư ví (Static ID) cho user ${targetUserId} | Số tiền: ${formattedPrice}`);
+
+                        const isZalo = targetUserIdStr.length >= 12;
+                        if (isZalo) {
+                            const zaloBotService = require('./zaloBotService');
+                            try {
+                                await zaloBotService.sendMessage(
+                                    String(targetUserId),
+                                    `💰 <b>NẠP SỐ DƯ THÀNH CÔNG!</b>\n\n` +
+                                    `Tài khoản ví của bạn đã được cộng thêm: <b>+${formattedPrice}</b>.\n` +
+                                    `💵 Số dư ví tích điểm hiện tại: <b>${totalBalance}</b>.`,
+                                    'html'
+                                );
+                            } catch (err) {
+                                console.error('Failed to notify Zalo customer of successful deposit:', err.message);
+                            }
+                        } else {
+                            try {
+                                await bot.telegram.sendMessage(
+                                    targetUserId,
+                                    `💰 <b>NẠP SỐ DƯ THÀNH CÔNG!</b>\n\n` +
+                                    `Tài khoản ví của bạn đã được cộng thêm: <b>+${formattedPrice}</b>.\n` +
+                                    `💵 Số dư ví tích điểm hiện tại: <b>${totalBalance}</b>.`,
+                                    { parse_mode: 'HTML' }
+                                );
+                            } catch (err) {
+                                console.error('Failed to notify Telegram customer of successful deposit:', err.message);
+                            }
+                        }
+
+                        // Notify Admin
+                        try {
+                            const notifyMsg = 
+                                `💰 <b>NẠP SỐ DƯ TỰ ĐỘNG THÀNH CÔNG (TÀI KHOẢN TĨNH)</b>\n\n` +
+                                `👤 Bệnh nhân: <b>${updatedUser.full_name || targetUserId}</b>\n` +
+                                `🆔 Kênh: <b>${isZalo ? 'Zalo' : 'Telegram'}</b>\n` +
+                                `🆔 ID: <code>${targetUserId}</code>\n` +
+                                `💵 Số tiền nạp: <b>${formattedPrice}</b>\n` +
+                                `💵 Số dư ví hiện tại: <b>${totalBalance}</b>`;
+                            await bot.telegram.sendMessage(config.ADMIN_ID, notifyMsg, { parse_mode: 'HTML' });
+                        } catch (err) {
+                            console.error('Failed to notify admin of static ID deposit:', err.message);
+                        }
+
+                        return res.json({ success: true, message: `Static ID Deposit for user ${targetUserId} completed` });
+                    }
+                }
             }
 
             console.log(`❓ Webhook: Không tìm thấy lịch hẹn hay yêu cầu nạp tiền khớp với mã: ${paymentCode}`);
@@ -339,6 +499,15 @@ function startWebhookServer(bot) {
             res.send(fs.readFileSync(filePath, 'utf8'));
         } else {
             res.status(404).send('Landing page not found');
+        }
+    });
+
+    app.get('/hero_mockup.png', (req, res) => {
+        const filePath = path.join(__dirname, '..', 'public', 'hero_mockup.png');
+        if (fs.existsSync(filePath)) {
+            res.sendFile(filePath);
+        } else {
+            res.status(404).send('Not Found');
         }
     });
 
@@ -794,7 +963,7 @@ function startWebhookServer(bot) {
         }
     });
 
-    const port = config.WEBHOOK_PORT || 3000;
+    const port = (config.WEBHOOK_PORT !== undefined && config.WEBHOOK_PORT !== null && config.WEBHOOK_PORT !== '') ? config.WEBHOOK_PORT : 3000;
     const server = app.listen(port, () => {
         console.log(`🌐 Webhook server đang lắng nghe tại cổng ${port}`);
     });

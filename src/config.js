@@ -24,6 +24,8 @@ module.exports = {
     WEBHOOK_PORT: parseInt(process.env.PORT) || parseInt(process.env.WEBHOOK_PORT) || 3000,
     SEPAY_API_KEY: process.env.SEPAY_API_KEY || '',
     DASHBOARD_TOKEN: process.env.DASHBOARD_TOKEN || require('crypto').randomBytes(16).toString('hex'),
+    PAYMENT_PREFIX: process.env.PAYMENT_PREFIX || 'CB',
+    PAYMENT_SECRET_KEY: BigInt(process.env.PAYMENT_SECRET_KEY || '123456789012345678'),
 
     // Zalo Chatbot
     ZALO_BOT_TOKEN: process.env.ZALO_BOT_TOKEN || '',

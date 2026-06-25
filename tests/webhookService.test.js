@@ -66,6 +66,9 @@ test.describe('WebhookService and Express API Tests', () => {
         // Clear collections and DB records for our test user
         db.prepare('DELETE FROM appointments WHERE user_id = ?').run(testUser.id);
         db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testUser.id);
+        db.prepare("DELETE FROM deposits WHERE payment_code IN ('CB-3BJMSZ5PVOJW4', 'CB-U9HBDMOJV9ZZ', 'CB3BJMSZ5PVOJW4', 'CBU9HBDMOJV9ZZ')").run();
+        db.prepare('DELETE FROM deposits WHERE user_id = 530718471553674176').run();
+        db.prepare('DELETE FROM users WHERE telegram_id = 530718471553674176').run();
         db.prepare('UPDATE users SET balance = 0 WHERE telegram_id = ?').run(testUser.id);
         sentTelegramMessages.length = 0;
     });
@@ -313,6 +316,84 @@ test.describe('WebhookService and Express API Tests', () => {
         // Check user balance is credited
         const user = userService.get(testUser.id);
         assert.strictEqual(user.balance, depositAmount);
+    });
+
+    test('PaymentService - encrypt and decrypt static ID', () => {
+        const paymentService = require('../src/services/paymentService');
+        const telegramId = '99999903';
+        const zaloId = '530718471553674179';
+
+        const encryptedTelegram = paymentService.encryptUserId(telegramId);
+        const decryptedTelegram = paymentService.decryptUserId(encryptedTelegram);
+        assert.strictEqual(decryptedTelegram, telegramId);
+
+        const encryptedZalo = paymentService.encryptUserId(zaloId);
+        const decryptedZalo = paymentService.decryptUserId(encryptedZalo);
+        assert.strictEqual(decryptedZalo, zaloId);
+    });
+
+    test('POST /webhook/sepay - completes static ID deposit', async () => {
+        const paymentService = require('../src/services/paymentService');
+        const depositAmount = 250000;
+        
+        // 1. Test static Telegram ID deposit
+        const cleanPrefix = (config.PAYMENT_PREFIX || 'CB').replace(/[-\s]/g, '');
+        const staticTelegramCode = `${cleanPrefix}${paymentService.encryptUserId(testUser.id)}`;
+        
+        const resTelegram = await fetch(`${baseUrl}/webhook/sepay`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Apikey test-secret-key'
+            },
+            body: JSON.stringify({
+                content: `Nap vi static ${staticTelegramCode}`,
+                transferAmount: depositAmount
+            })
+        });
+
+        assert.strictEqual(resTelegram.status, 200);
+        const dataTelegram = await resTelegram.json();
+        assert.strictEqual(dataTelegram.success, true);
+
+        // Check user balance is credited (should be depositAmount since beforeEach reset it to 0)
+        let user = userService.get(testUser.id);
+        assert.strictEqual(user.balance, depositAmount);
+
+        // 2. Test static Zalo ID deposit (we will register a temporary Zalo user)
+        const testZaloUser = {
+            id: 530718471553674179,
+            username: 'test_zalo_static',
+            first_name: 'Lan',
+            last_name: 'Huong'
+        };
+        userService.findOrCreate(testZaloUser);
+        
+        const staticZaloCode = `${cleanPrefix}${paymentService.encryptUserId(testZaloUser.id)}`;
+
+        const resZalo = await fetch(`${baseUrl}/webhook/sepay`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Apikey test-secret-key'
+            },
+            body: JSON.stringify({
+                content: `Nạp ví Zalo: ${staticZaloCode}`,
+                transferAmount: depositAmount
+            })
+        });
+
+        assert.strictEqual(resZalo.status, 200);
+        const dataZalo = await resZalo.json();
+        assert.strictEqual(dataZalo.success, true);
+
+        // Check Zalo user balance is credited
+        const zaloUser = userService.get(testZaloUser.id);
+        assert.strictEqual(zaloUser.balance, depositAmount);
+
+        // Clean up test Zalo user
+        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testZaloUser.id);
+        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testZaloUser.id);
     });
 
     test('SSO Login - single use and expiration validation', async () => {

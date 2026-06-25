@@ -33,12 +33,13 @@ const appointmentService = {
    * Get appointment by payment code
    */
   getByPaymentCode(code) {
+    const cleanCode = code.replace(/[-\s]/g, '').toUpperCase();
     return db.prepare(`
       SELECT a.*, p.name as package_name, p.emoji as package_emoji
       FROM appointments a
       JOIN products p ON a.package_id = p.id
-      WHERE a.payment_code = ?
-    `).get(code);
+      WHERE REPLACE(REPLACE(a.payment_code, '-', ''), ' ', '') = ?
+    `).get(cleanCode);
   },
 
   /**

@@ -338,7 +338,7 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         
         // Assert QR instructions and admin notification are sent
         assert.ok(lastFetchCall.options.body.text.includes('LỊCH ĐĂNG KÝ MỚI'));
-        assert.ok(lastFetchCall.options.body.text.includes('NAP PAY-'));
+        assert.ok(lastFetchCall.options.body.text.includes(config.PAYMENT_PREFIX || 'CB'));
     });
 
     test('POST /webhook/zalo Case 3: Booking flow cancellation (huy)', async () => {

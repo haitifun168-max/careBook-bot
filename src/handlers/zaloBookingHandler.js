@@ -108,7 +108,8 @@ async function handleZaloMessage(chatId, text, fromUser) {
             const userZaloId = chatId;
 
             // Generate a sample payment code for deposit instructions matching Telegram's deposit codes
-            const paymentCode = `NAP PAY-${userZaloId}`;
+            const cleanPrefix = (config.PAYMENT_PREFIX || 'CB').replace(/[-\s]/g, '');
+            const paymentCode = `${cleanPrefix}${paymentService.encryptUserId(userZaloId)}`;
             const b = config.BANK;
             const qrUrl = paymentService.generateQRUrl(100000, paymentCode, b);
 

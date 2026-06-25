@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README_EN.md",
+                "file": "output/workflows_sepay.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README_EN"
+              "title": "workflows_sepay"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "README_EN.md",
+                "file": "output/workflows_sepay.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Liên kết đến của README_EN"
+              "title": "Liên kết đến của workflows_sepay"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "README_EN.md",
+                "file": "output/workflows_sepay.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Liên kết đi ra từ README_EN"
+              "title": "Liên kết đi ra từ workflows_sepay"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "README_EN.md",
+                "file": "output/workflows_sepay.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Đề cương của README_EN"
+              "title": "Đề cương của workflows_sepay"
             }
           }
         ]
@@ -185,17 +185,20 @@
   },
   "active": "038e22d3f3887506",
   "lastOpenFiles": [
-    "careBook-bot",
+    "output/sales_proposal.md",
+    "output/HUONG_DAN_SU_DUNG.md",
+    "src/public/hero_mockup.png",
+    "README_EN.md",
     "data/shop.db-shm",
     "data/shop.db-wal",
+    "scratch_set_commands.js",
+    "scratch_set_webhook.js",
+    "careBook-bot",
     "src/handlers/zaloBookingHandler.js",
     "tests/zaloBot.test.js",
     "src/services/zaloBotService.js",
     "tests/webhookService.test.js",
     "tests/appointmentService.test.js",
-    "tests/userService.test.js",
-    "tests/db.test.js",
-    "tests",
     "README.md",
     "HUONG_DAN_SU_DUNG.md"
   ]

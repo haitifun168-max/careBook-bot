@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DVTT Shop Bot — Giải pháp bán hàng tự động hóa 100% trên Telegram</title>
+    <title>CareBook Bot — Hệ thống đặt lịch khám tự động 100% qua Zalo & Telegram</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #07090e;
-            --bg-gradient: radial-gradient(circle at top, #0f132b 0%, #05060a 100%);
-            --card-bg: rgba(17, 25, 40, 0.55);
-            --card-border: rgba(255, 255, 255, 0.06);
-            --neon-blue: #00f2fe;
-            --neon-pink: #ff007f;
-            --neon-green: #10b981;
-            --neon-purple: #8b5cf6;
+            --bg-color: #0b0f19;
+            --bg-gradient: radial-gradient(circle at top, #141c2f 0%, #080c14 100%);
+            --card-bg: rgba(22, 33, 54, 0.6);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --neon-cyan: #00f2fe;
+            --neon-blue: #3b82f6;
+            --neon-violet: #8b5cf6;
+            --neon-emerald: #10b981;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
-            --glow-blue: 0 0 20px rgba(0, 242, 254, 0.4);
-            --glow-pink: 0 0 20px rgba(255, 0, 127, 0.4);
-            --glow-green: 0 0 15px rgba(16, 185, 129, 0.35);
+            --glow-cyan: 0 0 25px rgba(0, 242, 254, 0.35);
+            --glow-violet: 0 0 25px rgba(139, 92, 246, 0.35);
+            --glow-emerald: 0 0 20px rgba(16, 185, 129, 0.3);
         }
 
         * {
@@ -43,18 +43,18 @@
         /* Ambient Glowing Background Blobs */
         .glowing-blob {
             position: absolute;
-            width: 500px;
-            height: 500px;
-            background: radial-gradient(circle, rgba(0, 242, 254, 0.08) 0%, rgba(255, 0, 127, 0.02) 70%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0, 242, 254, 0.07) 0%, rgba(139, 92, 246, 0.02) 70%);
             border-radius: 50%;
             z-index: -1;
-            filter: blur(100px);
+            filter: blur(120px);
             pointer-events: none;
         }
 
-        .blob-1 { top: 5%; left: -150px; }
-        .blob-2 { top: 45%; right: -150px; }
-        .blob-3 { bottom: 10%; left: 20%; }
+        .blob-1 { top: 5%; left: -200px; }
+        .blob-2 { top: 40%; right: -200px; background: radial-gradient(circle, rgba(139, 92, 246, 0.06) 0%, rgba(0, 242, 254, 0.01) 70%); }
+        .blob-3 { bottom: 15%; left: 15%; }
 
         .container {
             max-width: 1200px;
@@ -64,13 +64,13 @@
 
         /* Navigation Header */
         header {
-            padding: 24px 0;
+            padding: 20px 0;
             border-bottom: 1px solid var(--card-border);
-            backdrop-filter: blur(15px);
+            backdrop-filter: blur(20px);
             position: sticky;
             top: 0;
             z-index: 100;
-            background: rgba(7, 9, 14, 0.7);
+            background: rgba(11, 15, 25, 0.75);
         }
 
         .nav-wrapper {
@@ -86,7 +86,7 @@
             font-weight: 900;
             font-size: 1.6rem;
             letter-spacing: -0.5px;
-            background: linear-gradient(to right, var(--neon-blue), var(--neon-pink));
+            background: linear-gradient(to right, var(--neon-cyan), var(--neon-violet));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -97,15 +97,15 @@
         }
 
         @keyframes pulse {
-            0% { transform: scale(1); filter: drop-shadow(0 0 2px var(--neon-blue)); }
-            100% { transform: scale(1.15); filter: drop-shadow(0 0 8px var(--neon-blue)); }
+            0% { transform: scale(1); filter: drop-shadow(0 0 2px var(--neon-cyan)); }
+            100% { transform: scale(1.1); filter: drop-shadow(0 0 10px var(--neon-cyan)); }
         }
 
         .btn-top-bot {
             padding: 10px 22px;
             background: rgba(0, 242, 254, 0.08);
-            border: 1px solid var(--neon-blue);
-            color: var(--neon-blue);
+            border: 1px solid var(--neon-cyan);
+            color: var(--neon-cyan);
             text-decoration: none;
             border-radius: 20px;
             font-size: 0.9rem;
@@ -115,17 +115,39 @@
         }
 
         .btn-top-bot:hover {
-            background: var(--neon-blue);
-            color: #07090e;
-            box-shadow: var(--glow-blue);
+            background: var(--neon-cyan);
+            color: #0b0f19;
+            box-shadow: var(--glow-cyan);
             transform: translateY(-2px);
         }
 
         /* Hero Section */
         .hero {
-            padding: 90px 0 60px 0;
-            text-align: center;
-            position: relative;
+            padding: 80px 0 65px 0;
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 40px;
+            align-items: center;
+        }
+
+        @media (max-width: 992px) {
+            .hero {
+                grid-template-columns: 1fr;
+                text-align: center;
+                padding-top: 50px;
+            }
+        }
+
+        .hero-content {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        @media (max-width: 992px) {
+            .hero-content {
+                align-items: center;
+            }
         }
 
         .hero-badge {
@@ -134,45 +156,42 @@
             background: rgba(0, 242, 254, 0.1);
             border: 1px solid rgba(0, 242, 254, 0.25);
             border-radius: 20px;
-            color: var(--neon-blue);
+            color: var(--neon-cyan);
             font-size: 0.85rem;
             font-weight: 600;
             margin-bottom: 24px;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            box-shadow: 0 0 10px rgba(0, 242, 254, 0.05);
         }
 
         .hero h1 {
-            font-size: 3.6rem;
+            font-size: 3.5rem;
             font-weight: 900;
             letter-spacing: -1.5px;
-            line-height: 1.25;
+            line-height: 1.2;
             margin-bottom: 24px;
-            background: linear-gradient(to right, #ffffff 30%, var(--neon-blue) 75%, var(--neon-pink) 100%);
+            background: linear-gradient(to right, #ffffff 40%, var(--neon-cyan) 80%, var(--neon-violet) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
         .hero p {
-            font-size: 1.25rem;
+            font-size: 1.2rem;
             color: var(--text-muted);
-            max-width: 780px;
-            margin: 0 auto 40px auto;
+            margin-bottom: 35px;
+            max-width: 680px;
         }
 
         .hero-ctas {
             display: flex;
-            justify-content: center;
-            gap: 18px;
+            gap: 16px;
             flex-wrap: wrap;
-            margin-bottom: 50px;
         }
 
         .btn-primary {
             padding: 15px 36px;
-            background: linear-gradient(135deg, var(--neon-blue), #3b82f6);
-            color: #000;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-blue));
+            color: #0b0f19;
             border: none;
             border-radius: 30px;
             font-size: 1.05rem;
@@ -180,64 +199,84 @@
             cursor: pointer;
             text-decoration: none;
             transition: all 0.3s ease;
-            box-shadow: var(--glow-blue);
+            box-shadow: var(--glow-cyan);
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
         .btn-primary:hover {
-            transform: translateY(-3px) scale(1.02);
-            box-shadow: 0 0 25px rgba(0, 242, 254, 0.55);
+            transform: translateY(-3px) scale(1.01);
+            box-shadow: 0 0 28px rgba(0, 242, 254, 0.55);
         }
 
         .btn-secondary {
             padding: 15px 36px;
-            background: rgba(255, 0, 127, 0.08);
-            border: 1px solid var(--neon-pink);
-            color: var(--neon-pink);
+            background: rgba(139, 92, 246, 0.08);
+            border: 1px solid var(--neon-violet);
+            color: var(--neon-violet);
             border-radius: 30px;
             font-size: 1.05rem;
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
             transition: all 0.3s ease;
-            box-shadow: 0 0 10px rgba(255, 0, 127, 0.05);
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.05);
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
         .btn-secondary:hover {
-            background: var(--neon-pink);
+            background: var(--neon-violet);
             color: #ffffff;
-            box-shadow: var(--glow-pink);
+            box-shadow: var(--glow-violet);
             transform: translateY(-3px);
+        }
+
+        .hero-image-wrapper {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .hero-mockup-img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.4), 0 0 40px rgba(0, 242, 254, 0.1);
+            border: 1px solid var(--card-border);
+            transition: transform 0.5s ease;
+        }
+
+        .hero-mockup-img:hover {
+            transform: translateY(-5px) scale(1.02);
         }
 
         /* 3-Steps How it works Section */
         .benefits {
-            padding: 70px 0;
+            padding: 80px 0;
             border-top: 1px solid var(--card-border);
             border-bottom: 1px solid var(--card-border);
-            background: rgba(17, 25, 40, 0.25);
+            background: rgba(22, 33, 54, 0.2);
         }
 
         .section-header {
             text-align: center;
-            margin-bottom: 50px;
+            margin-bottom: 60px;
         }
 
         .section-header h2 {
             font-size: 2.3rem;
             font-weight: 800;
             letter-spacing: -0.8px;
-            margin-bottom: 12px;
+            margin-bottom: 15px;
         }
 
         .section-header p {
             color: var(--text-muted);
-            font-size: 1.05rem;
+            font-size: 1.1rem;
         }
 
         .benefits-grid {
@@ -250,9 +289,9 @@
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 20px;
-            padding: 35px 30px;
+            padding: 40px 30px;
             position: relative;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             backdrop-filter: blur(10px);
             transition: transform 0.3s ease, border-color 0.3s ease;
         }
@@ -264,19 +303,19 @@
 
         .benefit-icon {
             font-size: 2.2rem;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
             display: inline-flex;
-            width: 60px;
-            height: 60px;
+            width: 64px;
+            height: 64px;
             background: rgba(255, 255, 255, 0.03);
-            border-radius: 14px;
+            border-radius: 16px;
             align-items: center;
             justify-content: center;
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .benefit-card h3 {
-            font-size: 1.3rem;
+            font-size: 1.35rem;
             margin-bottom: 12px;
             font-weight: 700;
             color: #ffffff;
@@ -285,11 +324,12 @@
         .benefit-card p {
             color: var(--text-muted);
             font-size: 0.95rem;
+            line-height: 1.6;
         }
 
         /* Demo Section */
         .demo-section {
-            padding: 80px 0;
+            padding: 85px 0;
         }
 
         .demo-wrapper {
@@ -312,7 +352,7 @@
             display: flex;
             flex-direction: column;
             gap: 24px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 45px rgba(0,0,0,0.3);
             backdrop-filter: blur(10px);
             transition: border-color 0.3s ease;
         }
@@ -336,11 +376,11 @@
             letter-spacing: 0.5px;
         }
 
-        .badge-client { background: rgba(0, 242, 254, 0.1); color: var(--neon-blue); border: 1px solid rgba(0, 242, 254, 0.2); }
-        .badge-admin { background: rgba(255, 0, 127, 0.1); color: var(--neon-pink); border: 1px solid rgba(255, 0, 127, 0.2); }
+        .badge-client { background: rgba(0, 242, 254, 0.1); color: var(--neon-cyan); border: 1px solid rgba(0, 242, 254, 0.2); }
+        .badge-admin { background: rgba(139, 92, 246, 0.1); color: var(--neon-violet); border: 1px solid rgba(139, 92, 246, 0.2); }
 
         .demo-card h3 {
-            font-size: 1.6rem;
+            font-size: 1.65rem;
             font-weight: 800;
         }
 
@@ -348,7 +388,7 @@
             list-style: none;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 14px;
             flex-grow: 1;
         }
 
@@ -356,26 +396,114 @@
             font-size: 0.95rem;
             color: var(--text-muted);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 10px;
+            line-height: 1.5;
         }
 
         .demo-features li::before {
             content: '✓';
-            color: var(--neon-green);
+            color: var(--neon-emerald);
             font-weight: bold;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        /* Products Grid (Dynamic Services) */
+        .services-section {
+            padding: 80px 0;
+            background: rgba(22, 33, 54, 0.15);
+            border-top: 1px solid var(--card-border);
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .service-item-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .service-item-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(0, 242, 254, 0.25);
+            background: rgba(255, 255, 255, 0.04);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .service-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .service-card-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .service-card-price {
+            text-align: right;
+        }
+
+        .price-val {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--neon-cyan);
+        }
+
+        .price-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .service-card-desc {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            flex-grow: 1;
+            line-height: 1.5;
+        }
+
+        .service-card-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 15px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .deposit-val {
+            font-weight: 700;
+            color: var(--neon-emerald);
         }
 
         /* Core Features Showcase */
         .features-showcase {
-            padding: 80px 0;
+            padding: 85px 0;
             border-top: 1px solid var(--card-border);
-            background: rgba(17, 25, 40, 0.15);
+            background: rgba(22, 33, 54, 0.1);
         }
 
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 30px;
         }
 
@@ -397,15 +525,15 @@
 
         .feature-item-icon {
             font-size: 1.8rem;
-            width: 48px;
-            height: 48px;
+            width: 52px;
+            height: 52px;
             background: rgba(0, 242, 254, 0.05);
-            border-radius: 10px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            color: var(--neon-blue);
+            color: var(--neon-cyan);
         }
 
         .feature-item-content h4 {
@@ -418,87 +546,13 @@
         .feature-item-content p {
             color: var(--text-muted);
             font-size: 0.9rem;
+            line-height: 1.5;
         }
 
-        /* Pricing & License Models */
-        .pricing {
-            padding: 80px 0;
-            border-top: 1px solid var(--card-border);
-        }
-
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 35px;
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .pricing-card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 24px;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-            position: relative;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            backdrop-filter: blur(10px);
-            transition: transform 0.3s ease;
-        }
-
-        .pricing-card.featured {
-            border-color: var(--neon-blue);
-            box-shadow: 0 0 30px rgba(0, 242, 254, 0.15);
-            transform: scale(1.03);
-        }
-
-        @media (max-width: 768px) {
-            .pricing-card.featured {
-                transform: none;
-            }
-        }
-
-        .pricing-tag {
-            position: absolute;
-            top: 20px;
-            right: 25px;
-            background: var(--neon-blue);
-            color: #000;
-            font-size: 0.75rem;
-            font-weight: 700;
-            padding: 4px 12px;
-            border-radius: 12px;
-            text-transform: uppercase;
-        }
-
-        .pricing-card h3 {
-            font-size: 1.5rem;
-            font-weight: 800;
-        }
-
-        .pricing-price {
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-        }
-
-        .price-num {
-            font-size: 2.8rem;
-            font-weight: 900;
-            color: #ffffff;
-        }
-
-        .price-period {
-            color: var(--text-muted);
-            font-size: 1rem;
-        }
-
-        /* Documentation & Resources */
+        /* Resources Section */
         .resources {
             padding: 80px 0;
-            background: rgba(17, 25, 40, 0.2);
+            background: rgba(22, 33, 54, 0.25);
             border-top: 1px solid var(--card-border);
             border-bottom: 1px solid var(--card-border);
             text-align: center;
@@ -508,7 +562,7 @@
             display: flex;
             justify-content: center;
             gap: 20px;
-            margin-top: 30px;
+            margin-top: 35px;
             flex-wrap: wrap;
         }
 
@@ -534,7 +588,7 @@
 
         /* CTA Banner */
         .cta-banner {
-            padding: 90px 0;
+            padding: 95px 0;
             text-align: center;
             position: relative;
         }
@@ -556,7 +610,7 @@
         /* Footer */
         footer {
             padding: 40px 0;
-            background: #040508;
+            background: #06090f;
             border-top: 1px solid var(--card-border);
             color: var(--text-muted);
             font-size: 0.9rem;
@@ -570,13 +624,17 @@
             gap: 20px;
         }
 
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--neon-cyan);
+        }
+
         @media (max-width: 768px) {
-            .hero h1 {
-                font-size: 2.5rem;
-            }
-            .hero p {
-                font-size: 1.05rem;
-            }
             .footer-wrapper {
                 flex-direction: column;
                 text-align: center;
@@ -595,25 +653,30 @@
     <header>
         <div class="container nav-wrapper">
             <div class="logo">
-                <span class="logo-emoji">🤖</span>
-                <span id="nav-shop-name">DVTT Solutions</span>
+                <span class="logo-emoji">🩺</span>
+                <span id="nav-shop-name">CareBook Bot</span>
             </div>
-            <a href="#" id="nav-btn-bot" class="btn-top-bot" target="_blank">Trải Nghiệm Bot Demo</a>
+            <a href="#" id="nav-btn-bot" class="btn-top-bot" target="_blank">Đặt lịch qua Bot</a>
         </div>
     </header>
 
     <!-- Hero Section -->
     <section class="hero container">
-        <span class="hero-badge">Giải pháp B2B đột phá cho Shop bán sản phẩm số</span>
-        <h1 id="hero-title">Telegram Shop Bot & Web Dashboard</h1>
-        <p>Hệ thống tự động hóa 100% quy trình bán hàng, nạp số dư, giao hàng và quản lý doanh thu bằng trí tuệ nhân tạo. Tích hợp thanh toán QR ngân hàng tự động.</p>
-        <div class="hero-ctas">
-            <a href="#demo-area" class="btn-primary">
-                <span>⚡ Trải nghiệm Live Demo</span>
-            </a>
-            <a href="#pricing-area" class="btn-secondary">
-                <span>💰 Xem Bảng Giá Setup</span>
-            </a>
+        <div class="hero-content">
+            <span class="hero-badge">Hệ thống đặt lịch khám 24/7 tự động</span>
+            <h1>Giải pháp Zalo & Telegram Booking thông minh</h1>
+            <p>Hệ thống tự động tiếp đón bệnh nhân, kiểm tra slot trống real-time, sinh mã QR ngân hàng thanh toán cọc VietQR ẩn danh và đồng bộ Google Calendar phòng khám tức thì.</p>
+            <div class="hero-ctas">
+                <a href="#demo-area" class="btn-primary">
+                    <span>⚡ Trải nghiệm đặt lịch thử</span>
+                </a>
+                <a href="/admin/login" id="hero-btn-dashboard" class="btn-secondary">
+                    <span>🖥️ Dashboard Quản trị</span>
+                </a>
+            </div>
+        </div>
+        <div class="hero-image-wrapper">
+            <img src="/hero_mockup.png" alt="CareBook Bot Mockup" class="hero-mockup-img">
         </div>
     </section>
 
@@ -621,24 +684,24 @@
     <section class="benefits">
         <div class="container">
             <div class="section-header">
-                <h2>Giải phóng sức lao động & Tối đa hóa lợi nhuận</h2>
-                <p>3 lý do tại sao shop của bạn cần giải pháp tự động hóa này</p>
+                <h2>Hợp lý hóa khâu vận hành phòng khám</h2>
+                <p>3 lợi ích vượt trội giúp nâng tầm trải nghiệm của bệnh nhân</p>
             </div>
             <div class="benefits-grid">
                 <div class="benefit-card">
-                    <span class="benefit-icon">💸</span>
-                    <h3>Thanh toán VietQR tự động</h3>
-                    <p>Nhận diện biến động số dư ngân hàng qua SePay chỉ trong 3 giây. Tự động chuyển đơn thành công mà không cần đối soát thủ công.</p>
+                    <span class="benefit-icon">⏰</span>
+                    <h3>Đặt lịch nhanh dưới 60s</h3>
+                    <p>Khách hàng dễ dàng lựa chọn dịch vụ, ngày khám và khung giờ trống trực tiếp trên Zalo OA / Telegram Bot mọi lúc mọi nơi.</p>
                 </div>
                 <div class="benefit-card">
-                    <span class="benefit-icon">🤖</span>
-                    <h3>Giao hàng tức thì 24/7</h3>
-                    <p>Hệ thống tự động giao tài khoản, key kích hoạt, file dữ liệu cho khách hàng trực tiếp trên Telegram ngay khi nhận tiền thành công.</p>
+                    <span class="benefit-icon">💳</span>
+                    <h3>Thanh toán cọc tự động</h3>
+                    <p>Tự động hóa xác nhận cọc qua SePay. Nội dung giao dịch ẩn danh (e.g. `CBXXXXXX`) tăng bảo mật, loại bỏ hoàn toàn các lỗi cọc trễ.</p>
                 </div>
                 <div class="benefit-card">
-                    <span class="benefit-icon">📈</span>
-                    <h3>Dashboard Quản lý trực quan</h3>
-                    <p>Quản lý doanh số, theo dõi sức khỏe kho hàng (Low stock), chỉnh sửa giá bán và sản phẩm mượt mà bằng giao diện Web đẳng cấp.</p>
+                    <span class="benefit-icon">📅</span>
+                    <h3>Đồng bộ Google Calendar</h3>
+                    <p>Mỗi lịch hẹn đặt cọc thành công được đồng bộ ngay lập tức lên Google Calendar phòng khám, hiển thị trực quan cho nha sĩ và lễ tân.</p>
                 </div>
             </div>
         </div>
@@ -647,38 +710,93 @@
     <!-- Demo Area Section -->
     <section class="demo-section container" id="demo-area">
         <div class="section-header">
-            <h2>Khu vực trải nghiệm thực tế (Live Demo)</h2>
-            <p>Trực tiếp dùng thử cả 2 đầu giao diện của khách hàng và người bán trước khi quyết định mua</p>
+            <h2>Hệ sinh thái CareBook Bot</h2>
+            <p>Cung cấp trải nghiệm hoàn thiện cho cả khách hàng lẫn đội ngũ quản lý phòng khám</p>
         </div>
         <div class="demo-wrapper">
             <!-- Client Bot Demo -->
             <div class="demo-card">
                 <div class="demo-card-header">
-                    <span class="demo-badge badge-client">Khách Hàng</span>
-                    <h3>Telegram Shop Bot (Demo)</h3>
+                    <span class="demo-badge badge-client">Bệnh Nhân</span>
+                    <h3>Zalo & Telegram Booking Bot</h3>
                 </div>
-                <p style="color: var(--text-muted); font-size: 0.95rem;">Trải nghiệm quá trình mua hàng tự động trên điện thoại với tư cách là người mua. Chọn sản phẩm, sinh QR ngân hàng VietQR và thanh toán test.</p>
+                <p style="color: var(--text-muted); font-size: 0.95rem;">Trải nghiệm đặt lịch thực tế trên điện thoại với trợ lý chatbot. Lựa chọn khung giờ trống thông minh, thực hiện chuyển cọc ảo qua VietQR để khám phá cơ chế hoạt động của bot.</p>
                 <ul class="demo-features">
-                    <li>Menu Bot trực quan, hỗ trợ chọn sản phẩm/danh mục mượt mà.</li>
-                    <li>Tự động sinh mã VietQR theo chuẩn Napas kèm nội dung chuyển khoản tự động.</li>
-                    <li>Hỗ trợ Ví nạp số dư tích hợp (lệnh <code>/nap</code>).</li>
+                    <li>Menu Bot trực quan, hỗ trợ tra cứu dịch vụ, nạp tiền ví.</li>
+                    <li>Slot giờ real-time tự cập nhật, không trùng lịch.</li>
+                    <li>Sử dụng mã thanh toán ẩn danh ký tự thường (chữ & số) thân thiện với ứng dụng ngân hàng.</li>
                 </ul>
-                <a href="#" id="demo-btn-bot" class="btn-primary" style="justify-content: center;" target="_blank">💬 Vào Chat Với Bot Demo</a>
+                <a href="#" id="demo-btn-bot" class="btn-primary" style="justify-content: center;" target="_blank">💬 Vào Chat Với Chatbot</a>
             </div>
 
             <!-- Admin Dashboard Demo -->
             <div class="demo-card">
                 <div class="demo-card-header">
-                    <span class="demo-badge badge-admin">Chủ Shop</span>
-                    <h3>Web Dashboard Quản Trị</h3>
+                    <span class="demo-badge badge-admin">Phòng Khám</span>
+                    <h3>Web Dashboard Admin</h3>
                 </div>
-                <p style="color: var(--text-muted); font-size: 0.95rem;">Đăng nhập vào bảng điều khiển thời thượng. Thống kê KPI, theo dõi tăng trưởng, quản lý sản phẩm và nạp kho hàng (stock).</p>
+                <p style="color: var(--text-muted); font-size: 0.95rem;">Bảng điều khiển trực quan giúp bác sĩ và nhân viên lễ tân quản lý hiệu quả lịch làm việc, thống kê doanh số đặt cọc và tùy chỉnh công suất phòng khám.</p>
                 <ul class="demo-features">
-                    <li>Đăng nhập bảo mật cao bằng OTP chuyển thẳng về Telegram Admin.</li>
-                    <li>Biểu đồ Chart.js trực quan phản ánh tăng trưởng doanh số 7 ngày.</li>
-                    <li>Thống kê tình trạng kho hàng thực tế (Low stock cảnh báo đỏ/cam).</li>
+                    <li>Bảo mật cao với OTP đăng nhập một lần gửi thẳng về Telegram.</li>
+                    <li>Quản lý lịch hẹn: Xác nhận cọc trễ, hoàn tiền vào ví nếu slot bị đầy.</li>
+                    <li>Thiết lập khung giờ hoạt động và sức chứa tối đa của phòng khám.</li>
                 </ul>
-                <a href="#" id="demo-btn-dashboard" class="btn-secondary" style="justify-content: center; border-color: var(--neon-blue); color: var(--neon-blue); background: rgba(0, 242, 254, 0.05);" target="_blank">🖥️ Mở Thử Dashboard Quản Trị</a>
+                <a href="#" id="demo-btn-dashboard" class="btn-secondary" style="justify-content: center; border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0, 242, 254, 0.05);" target="_blank">🖥️ Truy cập Trang Quản Trị</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Grid section -->
+    <section class="services-section">
+        <div class="container">
+            <div class="section-header">
+                <h2>Các dịch vụ y tế nổi bật</h2>
+                <p>Danh sách các gói khám nha khoa đang được cấu hình thực tế trên hệ thống</p>
+            </div>
+            <div class="services-grid" id="services-list">
+                <!-- Dynamic products will be loaded here -->
+                <div class="service-item-card">
+                    <div class="service-card-header">
+                        <div class="service-card-title">🦷 Tẩy trắng răng Laser</div>
+                        <div class="service-card-price">
+                            <div class="price-val">1.5Mđ</div>
+                            <div class="price-label">Giá khám</div>
+                        </div>
+                    </div>
+                    <div class="service-card-desc">Tẩy trắng răng công nghệ Laser Whitening nhanh chóng, hiệu quả lâu dài và an toàn cho men răng.</div>
+                    <div class="service-card-footer">
+                        <span>Tiền cọc giữ chỗ:</span>
+                        <span class="deposit-val">100.000đ</span>
+                    </div>
+                </div>
+                <div class="service-item-card">
+                    <div class="service-card-header">
+                        <div class="service-card-title">👑 Bọc răng sứ Venus</div>
+                        <div class="service-card-price">
+                            <div class="price-val">3.0Mđ</div>
+                            <div class="price-label">Giá khám</div>
+                        </div>
+                    </div>
+                    <div class="service-card-desc">Răng sứ Venus nhập khẩu từ Đức, có độ thấu quang tốt và thời gian bảo hành lên tới 5 năm.</div>
+                    <div class="service-card-footer">
+                        <span>Tiền cọc giữ chỗ:</span>
+                        <span class="deposit-val">200.000đ</span>
+                    </div>
+                </div>
+                <div class="service-item-card">
+                    <div class="service-card-header">
+                        <div class="service-card-title">🩺 Nhổ răng khôn Piezotome</div>
+                        <div class="service-card-price">
+                            <div class="price-val">1.2Mđ</div>
+                            <div class="price-label">Giá khám</div>
+                        </div>
+                    </div>
+                    <div class="service-card-desc">Nhổ răng khôn không đau bằng sóng siêu âm công nghệ Piezotome, giảm sưng và nhanh phục hồi.</div>
+                    <div class="service-card-footer">
+                        <span>Tiền cọc giữ chỗ:</span>
+                        <span class="deposit-val">100.000đ</span>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -687,82 +805,38 @@
     <section class="features-showcase">
         <div class="container">
             <div class="section-header">
-                <h2>Các tính năng cốt lõi đi kèm</h2>
-                <p>Một hệ sinh thái trọn bộ sẵn sàng phục vụ kinh doanh số chuyên nghiệp</p>
+                <h2>Các tính năng kỹ thuật nâng cao</h2>
+                <p>Một kiến trúc hiện đại, an toàn và tối ưu cho vận hành liên tục</p>
             </div>
             <div class="features-grid">
                 <div class="feature-item">
-                    <span class="feature-item-icon">📢</span>
+                    <span class="feature-item-icon">⚡</span>
                     <div class="feature-item-content">
-                        <h4>Gửi tin hàng loạt (Broadcast)</h4>
-                        <p>Admin có thể gửi thông báo kèm khuyến mãi, tin tức (hỗ trợ định dạng HTML) tới hàng ngàn khách hàng đã dùng Bot chỉ trong 1 lệnh.</p>
+                        <h4>Mã hóa nội dung chuyển tiền</h4>
+                        <p>Nội dung chuyển khoản nạp ví tĩnh được mã hóa dựa trên giải thuật dịch bit và XOR 64-bit không trạng thái, loại bỏ hoàn toàn các ký tự đặc biệt giúp tối đa hóa khả năng quét và nhập liệu của khách hàng.</p>
                     </div>
                 </div>
                 <div class="feature-item">
                     <span class="feature-item-icon">👛</span>
                     <div class="feature-item-content">
-                        <h4>Hệ thống Ví & Số dư tích hợp</h4>
-                        <p>Khách hàng có thể nạp sẵn tiền vào ví. Khi mua hàng chỉ cần click "Thanh toán ví" để nhận hàng ngay lập tức mà không phải chuyển khoản nhiều lần.</p>
+                        <h4>Ví số dư & Tự động hoàn cọc</h4>
+                        <p>Nếu khách hàng cọc trễ và khung giờ đã bị đầy, hệ thống tự động hoàn tiền đặt cọc vào ví tích điểm trực tuyến của người dùng để sử dụng ngay lập tức cho lần đặt chỗ sau.</p>
                     </div>
                 </div>
                 <div class="feature-item">
                     <span class="feature-item-icon">🔒</span>
                     <div class="feature-item-content">
-                        <h4>Bảo mật Web & Webhook</h4>
-                        <p>Webhook SePay được mã hóa bảo mật với khóa API. Dashboard được bảo mật với OTP một lần hạn chế tối đa rủi ro xâm nhập.</p>
+                        <h4>Đăng nhập một lần (SSO OTP)</h4>
+                        <p>Trang quản trị được bảo vệ chặt chẽ, hỗ trợ cơ chế xác thực không mật khẩu (Passwordless) bằng cách gửi liên kết đăng nhập thời hạn 2 phút thẳng về Telegram của Admin.</p>
                     </div>
                 </div>
                 <div class="feature-item">
                     <span class="feature-item-icon">🗄️</span>
                     <div class="feature-item-content">
-                        <h4>Cơ sở dữ liệu SQLite siêu nhẹ</h4>
-                        <p>Toàn bộ cơ sở dữ liệu được quản lý bằng SQLite gọn nhẹ, không yêu cầu cài đặt MySQL/PostgreSQL phức tạp, dễ dàng sao lưu và khôi phục đơn giản.</p>
+                        <h4>SQLite siêu nhẹ & Linh hoạt</h4>
+                        <p>Không cần các hệ quản trị cồng kềnh, cơ sở dữ liệu SQLite cục bộ được tối ưu hóa chỉ số Index mang lại tốc độ truy vấn vượt trội cùng quy trình sao lưu đơn giản.</p>
                     </div>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Pricing Area -->
-    <section class="pricing container" id="pricing-area">
-        <div class="section-header">
-            <h2>Bảng giá triển khai giải pháp</h2>
-            <p>Chọn phương thức sở hữu giải pháp bán hàng phù hợp với định hướng tài chính của bạn</p>
-        </div>
-        <div class="pricing-grid">
-            <!-- SaaS Plan -->
-            <div class="pricing-card">
-                <h3>Gói Thuê Tháng (SaaS)</h3>
-                <div class="pricing-price">
-                    <span class="price-num">350k</span>
-                    <span class="price-period">/ tháng</span>
-                </div>
-                <p style="color: var(--text-muted); font-size: 0.9rem;">Phù hợp cho các shop mới bắt đầu, muốn thử nghiệm thị trường mà không cần quan tâm đến máy chủ kỹ thuật.</p>
-                <ul class="demo-features" style="font-size: 0.9rem;">
-                    <li>Chúng tôi chịu chi phí VPS & bảo trì 24/7.</li>
-                    <li>Sử dụng ngay sau 2 giờ setup.</li>
-                    <li>Hỗ trợ kỹ thuật trọn đời trong quá trình thuê.</li>
-                    <li>Miễn phí nâng cấp các bản vá lỗi.</li>
-                </ul>
-                <a href="#" id="pricing-btn-saas" class="btn-secondary" style="justify-content: center; margin-top: auto;" target="_blank">Liên hệ Đăng ký ngay</a>
-            </div>
-
-            <!-- Source Code Plan -->
-            <div class="pricing-card featured">
-                <span class="pricing-tag">Sở hữu vĩnh viễn</span>
-                <h3>Gói Bàn Giao Source Code</h3>
-                <div class="pricing-price">
-                    <span class="price-num">2.5 Tr</span>
-                    <span class="price-period">/ 1 lần mua</span>
-                </div>
-                <p style="color: var(--text-muted); font-size: 0.9rem;">Tốt nhất cho nhà phát triển hoặc chủ shop muốn làm chủ 100% hạ tầng, thương hiệu riêng và tự quản lý dữ liệu vĩnh viễn.</p>
-                <ul class="demo-features" style="font-size: 0.9rem;">
-                    <li>Bàn giao 100% mã nguồn sạch (Node.js/JS).</li>
-                    <li>Hỗ trợ cấu hình lên VPS riêng của bạn (tặng kèm SSL miễn phí).</li>
-                    <li>Không giới hạn số lượng khách hàng, số lượng đơn.</li>
-                    <li>Tự do chỉnh sửa tính năng theo ý muốn.</li>
-                </ul>
-                <a href="#" id="pricing-btn-source" class="btn-primary" style="justify-content: center; margin-top: auto;" target="_blank">Mua Đứt Giải Pháp</a>
             </div>
         </div>
     </section>
@@ -770,14 +844,14 @@
     <!-- Resources Section -->
     <section class="resources">
         <div class="container">
-            <h2>Tài liệu đi kèm giải pháp</h2>
-            <p>Tham khảo Sales Proposal đầy đủ và Tài liệu hướng dẫn sử dụng hệ thống chi tiết trên GitHub</p>
+            <h2>Tài nguyên phát triển dự án</h2>
+            <p>Mã nguồn mở và các hướng dẫn cài đặt hệ thống chi tiết phục vụ triển khai</p>
             <div class="resources-grid">
-                <a href="https://github.com/haitifun168-max/dvtt-shop-bot/blob/main/output/sales_proposal.md" class="btn-doc" target="_blank">
-                    <span>📄</span> Xem Sales Proposal (Chi tiết)
+                <a href="https://github.com/haitifun168-max/careBook-bot" class="btn-doc" target="_blank">
+                    <span>📦</span> GitHub Repository Mã Nguồn Sạch
                 </a>
-                <a href="https://github.com/haitifun168-max/dvtt-shop-bot/blob/main/output/HUONG_DAN_SU_DUNG.md" class="btn-doc" target="_blank">
-                    <span>📖</span> Hướng Dẫn Sử Dụng Hệ Thống
+                <a href="https://github.com/haitifun168-max/careBook-bot/blob/main/output/HUONG_DAN_SU_DUNG.md" class="btn-doc" target="_blank">
+                    <span>📖</span> Hướng Dẫn Vận Hành Hệ Thống
                 </a>
             </div>
         </div>
@@ -786,10 +860,10 @@
     <!-- Final CTA Banner -->
     <section class="cta-banner">
         <div class="container">
-            <h2>Nâng cấp Shop của bạn ngay hôm nay</h2>
-            <p>Đừng để khách hàng phải chờ đợi chuyển khoản thủ công. Hãy tự động hóa phễu bán hàng của bạn để tăng doanh số vượt trội.</p>
+            <h2>Tối ưu hóa quy trình phòng khám ngay hôm nay</h2>
+            <p>Hãy liên hệ với chúng tôi để tích hợp hệ thống trợ lý đặt lịch khám thông minh CareBook Bot vào Zalo OA và Telegram của bạn.</p>
             <a href="#" id="final-btn-contact" class="btn-primary" style="margin: 0 auto;" target="_blank">
-                <span>🚀 Nhận tư vấn & Cài đặt trọn gói</span>
+                <span>🚀 Nhận Tư Vấn & Cài Đặt Trọn Gói</span>
             </a>
         </div>
     </section>
@@ -798,11 +872,11 @@
     <footer>
         <div class="container footer-wrapper">
             <div>
-                <p>&copy; 2026 <strong>DVTT Solutions</strong>. All Rights Reserved.</p>
-                <p style="font-size: 0.8rem; margin-top: 5px; color: var(--text-muted);">Giải pháp chuyển đổi số thông minh cho thương mại điện tử Telegram.</p>
+                <p>&copy; 2026 <strong>CareBook Clinic Solutions</strong>. All Rights Reserved.</p>
+                <p style="font-size: 0.8rem; margin-top: 5px; color: var(--text-muted);">Giải pháp chuyển đổi số thông minh cho đặt lịch khám trực tuyến.</p>
             </div>
             <div class="footer-links">
-                <a href="/admin/login">Bảng quản trị demo</a>
+                <a href="/admin/login">Bảng Quản Trị</a>
             </div>
         </div>
     </footer>
@@ -814,7 +888,7 @@
 
         async function fetchConfig() {
             try {
-                // Fetch public config
+                // Fetch public config & products
                 const response = await fetch('/api/public/products');
                 const data = await response.json();
                 
@@ -828,17 +902,45 @@
                     document.getElementById('nav-btn-bot').href = botLink;
                     document.getElementById('demo-btn-bot').href = botLink;
                     
+                    // Update header name
+                    document.getElementById('nav-shop-name').innerText = data.shopName || 'CareBook Clinic';
+                    
                     // Admin Dashboard link
+                    document.getElementById('hero-btn-dashboard').href = `/admin/login`;
                     document.getElementById('demo-btn-dashboard').href = `/admin/login`;
                     
                     // Purchase & Contact links
-                    const contactText = encodeURIComponent("Chào bạn, mình muốn đăng ký tư vấn giải pháp Telegram Shop Bot và Web Dashboard.");
-                    const contactSaaSText = encodeURIComponent("Chào bạn, mình muốn đăng ký Gói Thuê Tháng (SaaS) cho Telegram Shop Bot.");
-                    const contactSourceText = encodeURIComponent("Chào bạn, mình muốn mua đứt gói Bàn Giao Source Code Telegram Shop Bot.");
-                    
-                    document.getElementById('pricing-btn-saas').href = `${contactLink}?text=${contactSaaSText}`;
-                    document.getElementById('pricing-btn-source').href = `${contactLink}?text=${contactSourceText}`;
+                    const contactText = encodeURIComponent("Chào bạn, mình muốn đăng ký tư vấn giải pháp CareBook Bot cho phòng khám.");
                     document.getElementById('final-btn-contact').href = `${contactLink}?text=${contactText}`;
+
+                    // Dynamically render products/services
+                    if (data.products && data.products.length > 0) {
+                        const servicesList = document.getElementById('services-list');
+                        servicesList.innerHTML = ''; // Clear default mock products
+                        
+                        data.products.forEach(prod => {
+                            const formattedPrice = new Intl.NumberFormat('vi-VN').format(prod.price) + 'đ';
+                            const formattedDeposit = new Intl.NumberFormat('vi-VN').format(prod.deposit_amount) + 'đ';
+                            
+                            const card = document.createElement('div');
+                            card.className = 'service-item-card';
+                            card.innerHTML = `
+                                <div class="service-card-header">
+                                    <div class="service-card-title">${prod.emoji || '🩺'} ${prod.name}</div>
+                                    <div class="service-card-price">
+                                        <div class="price-val">${formattedPrice}</div>
+                                        <div class="price-label">Giá khám</div>
+                                    </div>
+                                </div>
+                                <div class="service-card-desc">${prod.description || 'Không có mô tả chi tiết cho gói dịch vụ này.'}</div>
+                                <div class="service-card-footer">
+                                    <span>Tiền cọc giữ chỗ:</span>
+                                    <span class="deposit-val">${formattedDeposit}</span>
+                                </div>
+                            `;
+                            servicesList.appendChild(card);
+                        });
+                    }
                 }
             } catch (err) {
                 console.error("Lỗi lấy cấu hình:", err);
