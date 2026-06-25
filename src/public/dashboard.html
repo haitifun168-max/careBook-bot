@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareBook Clinic — Dashboard Quản trị</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(17, 24, 39, 0.7);
+            --card-border: rgba(255, 255, 255, 0.05);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-green: #10b981;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --sidebar-width: 260px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: rgba(17, 24, 39, 0.95);
+            border-right: 1px solid var(--card-border);
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            left: 0;
+            top: 0;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 40px;
+            padding-left: 10px;
+        }
+
+        .brand-icon {
+            font-size: 2rem;
+        }
+
+        .brand h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #3b82f6, #10b981);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .menu-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-grow: 1;
+        }
+
+        .menu-item a {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 16px;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .menu-item.active a, .menu-item a:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .menu-item.active a {
+            border-left: 3px solid var(--accent-blue);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .sidebar-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 20px;
+        }
+
+        .user-profile-info {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 15px;
+            padding: 0 10px;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .user-role {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .btn-logout {
+            width: 100%;
+            padding: 12px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 10px;
+            color: var(--accent-red);
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-logout:hover {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        /* Main Content area */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            flex-grow: 1;
+            padding: 40px;
+            max-width: 1250px;
+            width: calc(100% - var(--sidebar-width));
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 35px;
+        }
+
+        .header-title h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.8px;
+            margin-bottom: 4px;
+        }
+
+        .header-title p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .system-time {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            color: var(--accent-blue);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* KPI Cards Grid */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 24px;
+            margin-bottom: 35px;
+        }
+
+        .kpi-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .kpi-info h3 {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .kpi-info p {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .kpi-icon {
+            font-size: 2.2rem;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+        }
+
+        /* Panel Pages */
+        .panel-page {
+            display: none;
+        }
+
+        .panel-page.active {
+            display: block;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        /* Filtering tools */
+        .filter-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-select, .form-input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 10px 14px;
+            color: var(--text-main);
+            outline: none;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        .filter-select:focus, .form-input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        /* Table design */
+        .table-responsive {
+            overflow-x: auto;
+            width: 100%;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.95rem;
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Badges status */
+        .badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .badge-pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent-orange);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+
+        .badge-confirmed {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+        }
+
+        .badge-completed {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+
+        .badge-cancelled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        /* Buttons styles */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+        }
+
+        .btn-danger:hover {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .action-flex {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Modal dialog styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: #111827;
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 480px;
+            padding: 28px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .btn-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+        }
+
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .admin-only-section {
+            display: none; /* Controlled by JS RBAC */
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar navigation -->
+    <div class="sidebar">
+        <div class="brand">
+            <span class="brand-icon">🦷</span>
+            <h2>CareBook Portal</h2>
+        </div>
+        <ul class="menu-list">
+            <li class="menu-item active" id="menu-overview"><a onclick="switchPanel('overview')">📊 Tổng quan</a></li>
+            <li class="menu-item" id="menu-appointments"><a onclick="switchPanel('appointments')">📅 Lịch hẹn khám</a></li>
+            <li class="menu-item admin-only-section" id="menu-services"><a onclick="switchPanel('services')">🩺 Dịch vụ & Gói khám</a></li>
+            <li class="menu-item admin-only-section" id="menu-staff"><a onclick="switchPanel('staff')">👥 Nhân viên phòng khám</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="user-profile-info">
+                <span class="user-name" id="session-username">Đang tải...</span>
+                <span class="user-role" id="session-role">Role</span>
+            </div>
+            <button class="btn-logout" onclick="window.location.href='/admin/logout'">🚪 Đăng xuất</button>
+        </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-title">
+                <h1 id="page-title">Hệ thống tổng quan</h1>
+                <p id="page-subtitle">Thống kê hoạt động của phòng khám hôm nay</p>
+            </div>
+            <div class="system-time" id="clock-display">CareBook Clinic</div>
+        </div>
+
+        <!-- PAGE 1: OVERVIEW -->
+        <div id="panel-overview" class="panel-page active">
+            <!-- KPI Statistics -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Tổng lịch hẹn</h3>
+                        <p id="kpi-appointments">0</p>
+                    </div>
+                    <span class="kpi-icon">📅</span>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Tổng doanh thu cọc</h3>
+                        <p id="kpi-revenue">0đ</p>
+                    </div>
+                    <span class="kpi-icon">💰</span>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Giữ chỗ tạm thời</h3>
+                        <p id="kpi-pending">0</p>
+                    </div>
+                    <span class="kpi-icon">⏱️</span>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Hồ sơ bệnh nhân</h3>
+                        <p id="kpi-users">0</p>
+                    </div>
+                    <span class="kpi-icon">👥</span>
+                </div>
+            </div>
+
+            <!-- Recent bookings -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">10 Lịch hẹn đăng ký mới nhất</h3>
+                    <button class="btn btn-primary" onclick="loadData()">🔄 Làm mới</button>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Mã</th>
+                                <th>Bệnh nhân</th>
+                                <th>Số điện thoại</th>
+                                <th>Gói dịch vụ</th>
+                                <th>Ngày hẹn</th>
+                                <th>Giờ hẹn</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-appointments-table">
+                            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Đang tải dữ liệu lịch hẹn...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE 2: APPOINTMENTS -->
+        <div id="panel-appointments" class="panel-page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Danh sách chi tiết Lịch hẹn khám</h3>
+                    <div class="action-flex">
+                        <button class="btn btn-primary" onclick="loadAppointments()">🔄 Tải lại</button>
+                    </div>
+                </div>
+                
+                <!-- Filters -->
+                <div class="filter-bar">
+                    <input type="date" class="form-input" id="filter-appt-date" onchange="filterAppointments()">
+                    <select class="filter-select" id="filter-appt-status" onchange="filterAppointments()">
+                        <option value="all">Tất cả trạng thái</option>
+                        <option value="pending">⏳ Chờ đặt cọc (Pending)</option>
+                        <option value="confirmed">🟢 Đã xác nhận (Confirmed)</option>
+                        <option value="completed">✅ Đã khám xong (Completed)</option>
+                        <option value="cancelled">❌ Đã hủy lịch (Cancelled)</option>
+                    </select>
+                    <input type="text" class="form-input" id="filter-appt-search" placeholder="Tìm tên bệnh nhân / SĐT..." onkeyup="filterAppointments()">
+                </div>
+
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Mã LH</th>
+                                <th>Bệnh nhân</th>
+                                <th>Điện thoại</th>
+                                <th>Dịch vụ khám</th>
+                                <th>Ngày khám</th>
+                                <th>Giờ khám</th>
+                                <th>Tiền cọc</th>
+                                <th>Trạng thái</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="appointments-list-table">
+                            <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Đang truy vấn danh sách lịch hẹn...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE 3: SERVICES -->
+        <div id="panel-services" class="panel-page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Quản lý Gói dịch vụ khám</h3>
+                    <button class="btn btn-primary" id="btn-add-product" onclick="openAddProductModal()">➕ Thêm dịch vụ mới</button>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tên dịch vụ</th>
+                                <th>Phân loại</th>
+                                <th>Chi phí trọn gói</th>
+                                <th>Tiền cọc yêu cầu</th>
+                                <th>Trạng thái</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="products-list-table">
+                            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Đang tải danh mục dịch vụ...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE 4: STAFF -->
+        <div id="panel-staff" class="panel-page">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Tài khoản Nhân viên & Phân quyền</h3>
+                    <button class="btn btn-primary" onclick="openAddStaffModal()">➕ Thêm nhân sự mới</button>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tên đăng nhập</th>
+                                <th>Vai trò</th>
+                                <th>Ngày khởi tạo</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-list-table">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Đang tải danh sách nhân sự...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD/EDIT PRODUCT -->
+    <div class="modal" id="product-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="product-modal-title">Thêm gói dịch vụ mới</h3>
+                <button class="btn-close" onclick="closeProductModal()">&times;</button>
+            </div>
+            <form id="product-form" onsubmit="saveProduct(event)">
+                <input type="hidden" id="product-id">
+                
+                <div class="form-group">
+                    <label for="product-category">Chuyên khoa / Danh mục</label>
+                    <select id="product-category" class="filter-select" required></select>
+                </div>
+
+                <div class="form-group">
+                    <label for="product-name">Tên gói dịch vụ</label>
+                    <input type="text" id="product-name" class="form-input" required placeholder="Ví dụ: Nhổ răng khôn Piezotome">
+                </div>
+
+                <div class="form-group">
+                    <label for="product-price">Giá trọn gói (VND)</label>
+                    <input type="number" id="product-price" class="form-input" required placeholder="Ví dụ: 1200000">
+                </div>
+
+                <div class="form-group">
+                    <label for="product-deposit">Tiền cọc giữ chỗ (VND)</label>
+                    <input type="number" id="product-deposit" class="form-input" required placeholder="Ví dụ: 100000">
+                </div>
+
+                <div class="form-group">
+                    <label for="product-emoji">Icon Emoji</label>
+                    <input type="text" id="product-emoji" class="form-input" value="🩺" required placeholder="Ví dụ: 🦷, 👑, ✨">
+                </div>
+
+                <div class="form-group">
+                    <label for="product-promotion">Thông tin ưu đãi (nếu có)</label>
+                    <input type="text" id="product-promotion" class="form-input" placeholder="Ví dụ: Giảm 10% khi cọc online">
+                </div>
+
+                <div class="form-group">
+                    <label for="product-description">Mô tả dịch vụ</label>
+                    <textarea id="product-description" class="form-input" rows="3" placeholder="Nhập tóm tắt mô tả ngắn về dịch vụ..."></textarea>
+                </div>
+
+                <div class="form-group" id="product-active-group" style="display: none;">
+                    <label style="display: inline-flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="product-is-active" style="width: auto;"> Hoạt động (Hiện trên bot đặt lịch)
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-danger" onclick="closeProductModal()">Hủy bỏ</button>
+                    <button type="submit" class="btn btn-success">Lưu lại</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD STAFF -->
+    <div class="modal" id="staff-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Đăng ký tài khoản nhân viên</h3>
+                <button class="btn-close" onclick="closeStaffModal()">&times;</button>
+            </div>
+            <form id="staff-form" onsubmit="saveStaff(event)">
+                <div class="form-group">
+                    <label for="staff-username">Tên đăng nhập (chỉ chữ thường và số)</label>
+                    <input type="text" id="staff-username" class="form-input" required placeholder="Ví dụ: nhansu01" pattern="[a-z0-9]+">
+                </div>
+
+                <div class="form-group">
+                    <label for="staff-password">Mật khẩu đăng nhập</label>
+                    <input type="password" id="staff-password" class="form-input" required placeholder="Nhập mật khẩu">
+                </div>
+
+                <div class="form-group">
+                    <label for="staff-role">Phân quyền vai trò</label>
+                    <select id="staff-role" class="filter-select" required style="width:100%;">
+                        <option value="receptionist">Lễ tân (Xem, Check-in, Hủy lịch hẹn)</option>
+                        <option value="doctor">Bác sĩ (Chỉ xem danh sách lịch khám)</option>
+                        <option value="admin">Quản trị viên (Toàn quyền hệ thống)</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-danger" onclick="closeStaffModal()">Hủy</button>
+                    <button type="submit" class="btn btn-success">Tạo tài khoản</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: RESET PASSWORD -->
+    <div class="modal" id="reset-password-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Đặt lại mật khẩu nhân viên</h3>
+                <button class="btn-close" onclick="closeResetPasswordModal()">&times;</button>
+            </div>
+            <form id="reset-password-form" onsubmit="submitResetPassword(event)">
+                <input type="hidden" id="reset-username">
+                <div class="form-group">
+                    <label>Tài khoản nhân viên</label>
+                    <input type="text" id="reset-display-username" class="form-input" disabled>
+                </div>
+                <div class="form-group">
+                    <label for="reset-new-password">Mật khẩu mới</label>
+                    <input type="password" id="reset-new-password" class="form-input" required placeholder="Nhập mật khẩu mới">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-danger" onclick="closeResetPasswordModal()">Hủy</button>
+                    <button type="submit" class="btn btn-success">Cập nhật mật khẩu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SCRIPT APPLICATION CONTROLLER -->
+    <script>
+        let currentRole = '';
+        let appointments = [];
+        let categories = [];
+        let products = [];
+
+        // Formatting utilities
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
+        }
+
+        function formatDateTime(isoString) {
+            if (!isoString) return '-';
+            const date = new Date(isoString);
+            return date.toLocaleString('vi-VN');
+        }
+
+        // Switching Dashboard Pages
+        function switchPanel(panelName) {
+            // Update active menu tab
+            document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`menu-${panelName}`).classList.add('active');
+
+            // Show current panel
+            document.querySelectorAll('.panel-page').forEach(el => el.classList.remove('active'));
+            document.getElementById(`panel-${panelName}`).classList.add('active');
+
+            // Page settings & lazy loading
+            const titleMap = {
+                overview: 'Hệ thống tổng quan',
+                appointments: 'Lịch trình khám bệnh',
+                services: 'Danh mục dịch vụ y tế',
+                staff: 'Nhân viên phòng khám'
+            };
+            const subtitleMap = {
+                overview: 'Thống kê hoạt động của phòng khám hôm nay',
+                appointments: 'Theo dõi, hủy và xác nhận check-in cho bệnh nhân',
+                services: 'Quản trị các gói chăm sóc răng miệng & tiểu phẫu',
+                staff: 'Tạo tài khoản và phân quyền nhân sự phòng khám'
+            };
+            
+            document.getElementById('page-title').textContent = titleMap[panelName];
+            document.getElementById('page-subtitle').textContent = subtitleMap[panelName];
+
+            if (panelName === 'overview') loadData();
+            if (panelName === 'appointments') loadAppointments();
+            if (panelName === 'services') loadServices();
+            if (panelName === 'staff') loadStaff();
+        }
+
+        // Startup actions
+        window.onload = function() {
+            loadData();
+            // Start clock
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('clock-display').textContent = now.toLocaleString('vi-VN');
+            }, 1000);
+        };
+
+        // 1. Overview API load
+        async function loadData() {
+            try {
+                const response = await fetch('/admin/api/stats');
+                const res = await response.json();
+
+                if (!response.ok || !res.success) {
+                    window.location.href = '/admin/login?error=session_expired';
+                    return;
+                }
+
+                // Render session information & enforce RBAC elements
+                currentRole = res.user.role;
+                document.getElementById('session-username').textContent = res.user.username;
+                document.getElementById('session-role').textContent = translateRole(currentRole);
+
+                if (currentRole === 'admin') {
+                    document.querySelectorAll('.admin-only-section').forEach(el => el.style.display = 'block');
+                } else {
+                    document.querySelectorAll('.admin-only-section').forEach(el => el.style.display = 'none');
+                }
+
+                // Stats
+                document.getElementById('kpi-appointments').textContent = res.stats.totalAppointments;
+                document.getElementById('kpi-revenue').textContent = formatMoney(res.stats.totalRevenue);
+                document.getElementById('kpi-pending').textContent = res.stats.pendingAppointments;
+                document.getElementById('kpi-users').textContent = res.stats.totalUsers;
+
+                // Recent Appointments Table
+                const tbody = document.getElementById('recent-appointments-table');
+                tbody.innerHTML = '';
+
+                if (res.recentAppointments.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Không có lịch hẹn nào mới.</td></tr>';
+                    return;
+                }
+
+                res.recentAppointments.forEach(appt => {
+                    const statusBadge = getStatusBadge(appt.status);
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>#${appt.id}</td>
+                            <td><b>${appt.patient_name}</b></td>
+                            <td><code>${appt.patient_phone}</code></td>
+                            <td>${appt.package_name}</td>
+                            <td><b>${appt.booking_date}</b></td>
+                            <td><b>${appt.booking_time}</b></td>
+                            <td>${statusBadge}</td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error('Error fetching stats:', err);
+            }
+        }
+
+        // 2. Fetch Appointments list
+        async function loadAppointments() {
+            try {
+                const response = await fetch('/admin/api/appointments');
+                const res = await response.json();
+                
+                if (response.ok && res.success) {
+                    appointments = res.appointments;
+                    renderAppointmentsList(appointments);
+                }
+            } catch (err) {
+                console.error('Error fetching appointments:', err);
+            }
+        }
+
+        function renderAppointmentsList(list) {
+            const tbody = document.getElementById('appointments-list-table');
+            tbody.innerHTML = '';
+
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Không có lịch hẹn nào khớp bộ lọc.</td></tr>';
+                return;
+            }
+
+            list.forEach(appt => {
+                const statusBadge = getStatusBadge(appt.status);
+                
+                // RBAC action buttons permissions
+                const isDoctor = currentRole === 'doctor';
+                const canCheckIn = appt.status === 'confirmed' && !isDoctor;
+                const canCancel = appt.status === 'pending' || (appt.status === 'confirmed' && !isDoctor);
+
+                const checkinBtn = canCheckIn ? 
+                    `<button class="btn btn-success" onclick="checkInAppointment(${appt.id})">✔️ Check-in</button>` : '';
+                const cancelBtn = canCancel ? 
+                    `<button class="btn btn-danger" onclick="cancelAppointment(${appt.id})">❌ Hủy lịch</button>` : '';
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>#${appt.id}</td>
+                        <td><b>${appt.patient_name}</b></td>
+                        <td><code>${appt.patient_phone}</code></td>
+                        <td>${appt.package_name}</td>
+                        <td>${appt.booking_date}</td>
+                        <td>${appt.booking_time}</td>
+                        <td>${formatMoney(appt.deposit_amount)}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <div class="action-flex">
+                                ${checkinBtn}
+                                ${cancelBtn}
+                                ${(!canCheckIn && !canCancel) ? '<span style="color:var(--text-muted);font-size:0.85rem;">Không có thao tác</span>' : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function filterAppointments() {
+            const dateVal = document.getElementById('filter-appt-date').value;
+            const statusVal = document.getElementById('filter-appt-status').value;
+            const searchVal = document.getElementById('filter-appt-search').value.toLowerCase().trim();
+
+            let filtered = appointments;
+
+            if (dateVal) {
+                filtered = filtered.filter(a => a.booking_date === dateVal);
+            }
+            if (statusVal !== 'all') {
+                filtered = filtered.filter(a => a.status === statusVal);
+            }
+            if (searchVal) {
+                filtered = filtered.filter(a => 
+                    a.patient_name.toLowerCase().includes(searchVal) || 
+                    a.patient_phone.includes(searchVal) ||
+                    a.id.toString().includes(searchVal)
+                );
+            }
+
+            renderAppointmentsList(filtered);
+        }
+
+        async function checkInAppointment(id) {
+            if (!confirm(`Xác nhận check-in lịch hẹn #${id} cho bệnh nhân đến khám?`)) return;
+
+            try {
+                const response = await fetch('/admin/api/appointments/checkin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const res = await response.json();
+                if (response.ok && res.success) {
+                    alert('Check-in thành công!');
+                    loadAppointments();
+                } else {
+                    alert('Lỗi: ' + res.error);
+                }
+            } catch (err) {
+                alert('Không thể thực hiện thao tác.');
+            }
+        }
+
+        async function cancelAppointment(id) {
+            if (!confirm(`Xác nhận hủy lịch hẹn #${id}? Slot sẽ được trả tự động và gửi tin nhắn thông báo cho khách.`)) return;
+
+            try {
+                const response = await fetch('/admin/api/appointments/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const res = await response.json();
+                if (response.ok && res.success) {
+                    alert('Đã hủy lịch hẹn thành công.');
+                    loadAppointments();
+                } else {
+                    alert('Lỗi: ' + res.error);
+                }
+            } catch (err) {
+                alert('Không thể thực hiện thao tác.');
+            }
+        }
+
+        // 3. Services / Packages Management
+        async function loadServices() {
+            try {
+                const response = await fetch('/admin/api/products');
+                const res = await response.json();
+                if (response.ok && res.success) {
+                    categories = res.categories;
+                    products = res.products;
+
+                    // Fill Categories options in modal select
+                    const catSelect = document.getElementById('product-category');
+                    catSelect.innerHTML = '';
+                    categories.forEach(cat => {
+                        catSelect.innerHTML += `<option value="${cat.id}">${cat.emoji} ${cat.name}</option>`;
+                    });
+
+                    renderServicesList(products);
+                }
+            } catch (err) {
+                console.error('Error fetching services:', err);
+            }
+        }
+
+        function renderServicesList(list) {
+            const tbody = document.getElementById('products-list-table');
+            tbody.innerHTML = '';
+
+            list.forEach(p => {
+                const statusBadge = p.is_active ? 
+                    '<span class="badge badge-completed">Hoạt động</span>' : 
+                    '<span class="badge badge-cancelled">Tạm tắt</span>';
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${p.id}</td>
+                        <td><b>${p.emoji} ${p.name}</b></td>
+                        <td>${p.category_name}</td>
+                        <td>${formatMoney(p.price)}</td>
+                        <td>${formatMoney(p.deposit_amount)}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <div class="action-flex">
+                                <button class="btn btn-primary" onclick="openEditProductModal(${p.id})">📝 Sửa</button>
+                                <button class="btn btn-danger" onclick="deleteProduct(${p.id})">🗑️ Xóa</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        // Modals management Gói dịch vụ
+        function openAddProductModal() {
+            document.getElementById('product-modal-title').textContent = 'Thêm gói dịch vụ mới';
+            document.getElementById('product-id').value = '';
+            document.getElementById('product-form').reset();
+            document.getElementById('product-active-group').style.display = 'none';
+            document.getElementById('product-modal').style.display = 'flex';
+        }
+
+        function openEditProductModal(id) {
+            const p = products.find(x => x.id === id);
+            if (!p) return;
+
+            document.getElementById('product-modal-title').textContent = 'Chỉnh sửa dịch vụ #' + p.id;
+            document.getElementById('product-id').value = p.id;
+            document.getElementById('product-category').value = p.category_id;
+            document.getElementById('product-name').value = p.name;
+            document.getElementById('product-price').value = p.price;
+            document.getElementById('product-deposit').value = p.deposit_amount;
+            document.getElementById('product-emoji').value = p.emoji;
+            document.getElementById('product-promotion').value = p.promotion || '';
+            document.getElementById('product-description').value = p.description || '';
+            document.getElementById('product-is-active').checked = p.is_active === 1;
+
+            document.getElementById('product-active-group').style.display = 'block';
+            document.getElementById('product-modal').style.display = 'flex';
+        }
+
+        function closeProductModal() {
+            document.getElementById('product-modal').style.display = 'none';
+        }
+
+        async function saveProduct(e) {
+            e.preventDefault();
+            const id = document.getElementById('product-id').value;
+            const category_id = document.getElementById('product-category').value;
+            const name = document.getElementById('product-name').value;
+            const price = document.getElementById('product-price').value;
+            const deposit_amount = document.getElementById('product-deposit').value;
+            const emoji = document.getElementById('product-emoji').value;
+            const promotion = document.getElementById('product-promotion').value;
+            const description = document.getElementById('product-description').value;
+            const is_active = document.getElementById('product-is-active').checked;
+
+            const url = id ? '/admin/api/products/edit' : '/admin/api/products/add';
+            const body = {
+                category_id, name, price, deposit_amount, emoji, promotion, description,
+                is_active
+            };
+            if (id) body.id = id;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const res = await response.json();
+
+                if (response.ok && res.success) {
+                    alert('Lưu dịch vụ thành công!');
+                    closeProductModal();
+                    loadServices();
+                } else {
+                    alert('Lỗi: ' + res.error);
+                }
+            } catch (err) {
+                alert('Không thể kết nối đến máy chủ.');
+            }
+        }
+
+        async function deleteProduct(id) {
+            if (!confirm(`Bạn chắc chắn muốn xóa vĩnh viễn gói dịch vụ #${id}?`)) return;
+
+            try {
+                const response = await fetch('/admin/api/products/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const res = await response.json();
+                if (response.ok && res.success) {
+                    alert('Đã xóa dịch vụ thành công.');
+                    loadServices();
+                }
+            } catch (err) {
+                alert('Lỗi thực thi xóa.');
+            }
+        }
+
+        // 4. Clinic Staff Accounts management (Admin only)
+        async function loadStaff() {
+            try {
+                const response = await fetch('/admin/api/staff/list');
+                const res = await response.json();
+
+                if (response.ok && res.success) {
+                    const tbody = document.getElementById('staff-list-table');
+                    tbody.innerHTML = '';
+
+                    res.staff.forEach(user => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${user.id}</td>
+                                <td><b>${user.username}</b></td>
+                                <td><span class="badge badge-confirmed">${translateRole(user.role)}</span></td>
+                                <td>${formatDateTime(user.created_at)}</td>
+                                <td>
+                                    <div class="action-flex">
+                                        <button class="btn btn-primary" onclick="openResetPasswordModal('${user.username}')">🔑 Reset Pass</button>
+                                        ${user.username !== 'admin' ? `<button class="btn btn-danger" onclick="deleteStaff('${user.username}')">🗑️ Xóa</button>` : ''}
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+            } catch (err) {
+                console.error('Error fetching staff list:', err);
+            }
+        }
+
+        function openAddStaffModal() {
+            document.getElementById('staff-form').reset();
+            document.getElementById('staff-modal').style.display = 'flex';
+        }
+
+        function closeStaffModal() {
+            document.getElementById('staff-modal').style.display = 'none';
+        }
+
+        async function saveStaff(e) {
+            e.preventDefault();
+            const username = document.getElementById('staff-username').value;
+            const password = document.getElementById('staff-password').value;
+            const role = document.getElementById('staff-role').value;
+
+            try {
+                const response = await fetch('/admin/api/staff/manage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'create', username, password, role })
+                });
+                const res = await response.json();
+
+                if (response.ok && res.success) {
+                    alert(res.message);
+                    closeStaffModal();
+                    loadStaff();
+                } else {
+                    alert('Lỗi: ' + res.error);
+                }
+            } catch (err) {
+                alert('Không thể kết nối.');
+            }
+        }
+
+        function openResetPasswordModal(username) {
+            document.getElementById('reset-username').value = username;
+            document.getElementById('reset-display-username').value = username;
+            document.getElementById('reset-new-password').value = '';
+            document.getElementById('reset-password-modal').style.display = 'flex';
+        }
+
+        function closeResetPasswordModal() {
+            document.getElementById('reset-password-modal').style.display = 'none';
+        }
+
+        async function submitResetPassword(e) {
+            e.preventDefault();
+            const username = document.getElementById('reset-username').value;
+            const password = document.getElementById('reset-new-password').value;
+
+            try {
+                const response = await fetch('/admin/api/staff/manage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'reset_password', username, password })
+                });
+                const res = await response.json();
+
+                if (response.ok && res.success) {
+                    alert(res.message);
+                    closeResetPasswordModal();
+                } else {
+                    alert('Lỗi: ' + res.error);
+                }
+            } catch (err) {
+                alert('Không thể cập nhật mật khẩu.');
+            }
+        }
+
+        async function deleteStaff(username) {
+            if (!confirm(`Bạn chắc chắn muốn xóa vĩnh viễn tài khoản nhân sự ${username}?`)) return;
+
+            try {
+                const response = await fetch('/admin/api/staff/manage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', username })
+                });
+                const res = await response.json();
+
+                if (response.ok && res.success) {
+                    alert('Đã xóa thành công.');
+                    loadStaff();
+                } else {
+                    alert('Lỗi: ' + res.error);
+                }
+            } catch (err) {
+                alert('Không thể thực hiện.');
+            }
+        }
+
+        // Badge translation helper
+        function getStatusBadge(status) {
+            const map = {
+                pending: '<span class="badge badge-pending">⏳ Chờ cọc</span>',
+                confirmed: '<span class="badge badge-confirmed">🟢 Đã cọc</span>',
+                completed: '<span class="badge badge-completed">✅ Đã khám</span>',
+                cancelled: '<span class="badge badge-cancelled">❌ Đã hủy</span>'
+            };
+            return map[status] || `<span class="badge">${status}</span>`;
+        }
+
+        function translateRole(role) {
+            const map = {
+                admin: 'Quản trị viên (Admin)',
+                receptionist: 'Lễ tân (Receptionist)',
+                doctor: 'Bác sĩ (Doctor)'
+            };
+            return map[role] || role;
+        }
+    </script>
+</body>
+</html>
