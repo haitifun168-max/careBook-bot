@@ -176,7 +176,8 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
-        if (normalizedText === '/xinchao' || normalizedText === 'xinchao') {
+        const startCommands = ['/start', 'start', '/xinchao', 'xinchao', 'bắt đầu', 'bat dau', 'batdau', 'hello', 'hi', 'chào', 'chao'];
+        if (startCommands.includes(normalizedText)) {
             // Show welcome message
             const welcomeMsg = `👋 Chào mừng bạn đến với <b>ĐẶT LỊCH TỰ ĐỘNG!</b>\n` +
                                `Tôi là trợ lý đặt lịch tự động của phòng khám.`;

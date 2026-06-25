@@ -113,6 +113,39 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         assert.ok(lastFetchCall.options.body.text.includes('CHÀO MỪNG BẠN ĐẾN VỚI'));
     });
 
+    test('POST /webhook/zalo greeting command start triggers welcome message', async () => {
+        const payload = {
+            update_id: 1000,
+            message: {
+                message_id: 889,
+                chat: {
+                    id: '123456789'
+                },
+                text: '/start',
+                from: {
+                    first_name: 'Minh',
+                    last_name: 'An',
+                    id: '123456789'
+                }
+            }
+        };
+
+        const response = await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        assert.strictEqual(response.status, 200);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        assert.ok(lastFetchCall);
+        assert.ok(lastFetchCall.options.body.text.includes('CHÀO MỪNG BẠN ĐẾN VỚI'));
+    });
+
     test('POST /webhook/zalo menu items 2-7', async () => {
         const menuItems = [
             { text: '2', expected: 'thông tin bệnh nhân zalo' },
