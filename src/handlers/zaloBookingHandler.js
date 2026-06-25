@@ -71,7 +71,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
-        if (normalizedText === '2' || normalizedText === 'thong tin' || normalizedText === 'thông tin' || normalizedText === 'thongtin') {
+        if (normalizedText === '2' || normalizedText === 'thong tin' || normalizedText === 'thông tin' || normalizedText === 'thongtin' || normalizedText === '/menu') {
             const user = userService.get(numericUserId);
             const name = fromUser ? `${fromUser.first_name || ''} ${fromUser.last_name || ''}`.trim() : 'Khách hàng Zalo';
             const userMsg = 
@@ -84,7 +84,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
-        if (normalizedText === '3' || normalizedText === 'dich vu' || normalizedText === 'dịch vụ' || normalizedText === 'dichvu') {
+        if (normalizedText === '3' || normalizedText === 'dich vu' || normalizedText === 'dịch vụ' || normalizedText === 'dichvu' || normalizedText === '/product') {
             const products = productService.getAll();
             let menuMsg = '🩺 <b>DANH SÁCH DỊCH VỤ & GÓI KHÁM</b>\n\n';
             products.forEach((prod) => {
@@ -97,7 +97,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
-        if (normalizedText === '4' || normalizedText === 'nap tien' || normalizedText === 'nạp tiền' || normalizedText === 'naptien') {
+        if (normalizedText === '4' || normalizedText === 'nap tien' || normalizedText === 'nạp tiền' || normalizedText === 'naptien' || normalizedText === '/nap') {
             const user = userService.get(numericUserId);
             const userZaloId = chatId;
 
@@ -125,7 +125,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
-        if (normalizedText === '5' || normalizedText === 'lich hen' || normalizedText === 'lịch hẹn' || normalizedText === 'lichhen') {
+        if (normalizedText === '5' || normalizedText === 'lich hen' || normalizedText === 'lịch hẹn' || normalizedText === 'lichhen' || normalizedText === '/checkpay') {
             try {
                 const appts = db.prepare(`
                     SELECT a.*, p.name as package_name 
@@ -161,7 +161,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
-        if (normalizedText === '6' || normalizedText === 'ho tro' || normalizedText === 'hỗ trợ' || normalizedText === 'hotro') {
+        if (normalizedText === '6' || normalizedText === 'ho tro' || normalizedText === 'hỗ trợ' || normalizedText === 'hotro' || normalizedText === '/support') {
             const supportMsg = 
                 `🆘 <b>HỖ TRỢ Y TẾ & THÔNG TIN PHÒNG KHÁM</b>\n\n` +
                 `🏢 Phòng khám: <b>${config.SHOP_NAME}</b>\n` +
@@ -171,9 +171,16 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
-        if (normalizedText === '7' || normalizedText === 'id') {
+        if (normalizedText === '7' || normalizedText === 'id' || normalizedText === '/myid') {
             await zaloBotService.sendMessage(chatId, `🆔 Zalo ID của bạn là: <code>${chatId}</code>`, 'html');
             return;
+        }
+
+        if (normalizedText === '/xinchao' || normalizedText === 'xinchao') {
+            // Show welcome message
+            const welcomeMsg = `👋 Chào mừng bạn đến với <b>${config.SHOP_NAME}</b>!\n` +
+                               `Tôi là trợ lý đặt lịch tự động của phòng khám.`;
+            await zaloBotService.sendMessage(chatId, welcomeMsg, 'html');
         }
 
         // Default Main Menu Response
