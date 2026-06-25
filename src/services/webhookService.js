@@ -334,7 +334,7 @@ function startWebhookServer(bot) {
             // Check pending deposits if no appointment was found
             const cleanCode = paymentCode.replace(/[-\s]/g, '').toUpperCase();
             const deposit = db.prepare(`
-                SELECT * FROM deposits 
+                SELECT *, CAST(user_id AS TEXT) as user_id FROM deposits 
                 WHERE REPLACE(REPLACE(payment_code, '-', ''), ' ', '') = ? 
                   AND status = 'pending'
             `).get(cleanCode);
@@ -416,7 +416,7 @@ function startWebhookServer(bot) {
                 }
 
                 if (targetUserIdStr) {
-                    const targetUserId = parseInt(targetUserIdStr) || 0;
+                    const targetUserId = targetUserIdStr;
                     const user = userService.get(targetUserId);
                     if (user) {
                         // Create a completed deposit record
@@ -753,7 +753,7 @@ function startWebhookServer(bot) {
     app.get('/admin/api/appointments', checkRole(['admin', 'receptionist', 'doctor']), (req, res) => {
         try {
             const rows = db.prepare(`
-                SELECT a.*, p.name as package_name, p.emoji as package_emoji, u.username as telegram_username
+                SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name, p.emoji as package_emoji, u.username as telegram_username
                 FROM appointments a
                 JOIN products p ON a.package_id = p.id
                 LEFT JOIN users u ON a.user_id = u.telegram_id

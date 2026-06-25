@@ -21,8 +21,8 @@ function formatPrice(amount) {
  * Main Message Router for Zalo Bot
  */
 async function handleZaloMessage(chatId, text, fromUser) {
-    const numericUserId = parseInt(chatId) || 0;
-    if (numericUserId > 0 && fromUser) {
+    const numericUserId = chatId;
+    if (numericUserId && fromUser) {
         // Register user if not exists
         userService.findOrCreate({
             id: numericUserId,
@@ -465,7 +465,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
                 zaloBotService.sendMessage(config.ADMIN_ID, adminMsg, 'html').catch(() => {});
 
             // 15-Minute Expiration Timer for Zalo
-            setTimeout(async () => {
+            const timer = setTimeout(async () => {
                 try {
                     const freshAppt = appointmentService.getById(appointment.id);
                     if (freshAppt && freshAppt.status === 'pending') {
@@ -492,6 +492,9 @@ async function handleZaloMessage(chatId, text, fromUser) {
                     console.error(`Error in Zalo appointment #${appointment.id} expiration timer:`, err.message);
                 }
             }, 15 * 60 * 1000);
+            if (timer && typeof timer.unref === 'function') {
+                timer.unref();
+            }
 
             return;
         } else if (cleanText === '2' && session.hasEnoughBalance) {

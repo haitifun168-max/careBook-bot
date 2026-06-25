@@ -84,32 +84,44 @@ module.exports = (bot) => {
             );
         }
 
-        const targetId = parseInt(args[1]);
+        const targetIdStr = args[1];
         const amount = parseInt(args[2]);
 
-        if (isNaN(targetId) || isNaN(amount) || amount <= 0) {
-            return ctx.reply('❌ Telegram ID hoặc Số tiền không hợp lệ.');
+        if (!targetIdStr || !/^\d+$/.test(targetIdStr) || isNaN(amount) || amount <= 0) {
+            return ctx.reply('❌ Telegram/Zalo ID hoặc Số tiền không hợp lệ.');
         }
 
-        const user = userService.get(targetId);
+        const user = userService.get(targetIdStr);
         if (!user) {
             return ctx.reply('❌ Không tìm thấy thông tin bệnh nhân này trong database.');
         }
 
-        userService.addBalance(targetId, amount);
-        const updatedUser = userService.get(targetId);
+        userService.addBalance(targetIdStr, amount);
+        const updatedUser = userService.get(targetIdStr);
 
-        ctx.replyWithHTML(`✅ Đã cộng <b>${formatPrice(amount)}</b> vào tài khoản của <b>${updatedUser.full_name || targetId}</b>. Số dư mới: <b>${formatPrice(updatedUser.balance)}</b>`);
+        ctx.replyWithHTML(`✅ Đã cộng <b>${formatPrice(amount)}</b> vào tài khoản của <b>${updatedUser.full_name || targetIdStr}</b>. Số dư mới: <b>${formatPrice(updatedUser.balance)}</b>`);
 
         // Notify customer
         try {
-            await bot.telegram.sendMessage(
-                targetId,
-                `💰 <b>BIẾN ĐỘNG SỐ DƯ VÍ</b>\n\n` +
-                `Tài khoản ví tích điểm của bạn đã được cộng: <b>+${formatPrice(amount)}</b>.\n` +
-                `💵 Số dư hiện tại: <b>${formatPrice(updatedUser.balance)}</b>.`,
-                { parse_mode: 'HTML' }
-            );
+            const isZalo = targetIdStr.length >= 12;
+            if (isZalo) {
+                const zaloBotService = require('../services/zaloBotService');
+                await zaloBotService.sendMessage(
+                    targetIdStr,
+                    `💰 <b>BIẾN ĐỘNG SỐ DƯ VÍ</b>\n\n` +
+                    `Tài khoản ví tích điểm của bạn đã được cộng: <b>+${formatPrice(amount)}</b>.\n` +
+                    `💵 Số dư hiện tại: <b>${formatPrice(updatedUser.balance)}</b>.`,
+                    'html'
+                );
+            } else {
+                await bot.telegram.sendMessage(
+                    targetIdStr,
+                    `💰 <b>BIẾN ĐỘNG SỐ DƯ VÍ</b>\n\n` +
+                    `Tài khoản ví tích điểm của bạn đã được cộng: <b>+${formatPrice(amount)}</b>.\n` +
+                    `💵 Số dư hiện tại: <b>${formatPrice(updatedUser.balance)}</b>.`,
+                    { parse_mode: 'HTML' }
+                );
+            }
         } catch (err) {
             console.error('Failed to notify customer of manual balance credit:', err.message);
         }
@@ -127,14 +139,14 @@ module.exports = (bot) => {
             );
         }
 
-        const targetId = parseInt(args[1]);
+        const targetIdStr = args[1];
         const amount = parseInt(args[2]);
 
-        if (isNaN(targetId) || isNaN(amount) || amount <= 0) {
-            return ctx.reply('❌ Telegram ID hoặc Số tiền không hợp lệ.');
+        if (!targetIdStr || !/^\d+$/.test(targetIdStr) || isNaN(amount) || amount <= 0) {
+            return ctx.reply('❌ Telegram/Zalo ID hoặc Số tiền không hợp lệ.');
         }
 
-        const user = userService.get(targetId);
+        const user = userService.get(targetIdStr);
         if (!user) {
             return ctx.reply('❌ Không tìm thấy thông tin bệnh nhân này trong database.');
         }
@@ -143,20 +155,32 @@ module.exports = (bot) => {
             return ctx.reply(`❌ Số dư ví hiện tại (${formatPrice(user.balance)}) ít hơn số tiền muốn trừ.`);
         }
 
-        userService.deductBalance(targetId, amount);
-        const updatedUser = userService.get(targetId);
+        userService.deductBalance(targetIdStr, amount);
+        const updatedUser = userService.get(targetIdStr);
 
-        ctx.replyWithHTML(`✅ Đã trừ <b>${formatPrice(amount)}</b> từ tài khoản của <b>${updatedUser.full_name || targetId}</b>. Số dư mới: <b>${formatPrice(updatedUser.balance)}</b>`);
+        ctx.replyWithHTML(`✅ Đã trừ <b>${formatPrice(amount)}</b> từ tài khoản của <b>${updatedUser.full_name || targetIdStr}</b>. Số dư mới: <b>${formatPrice(updatedUser.balance)}</b>`);
 
         // Notify customer
         try {
-            await bot.telegram.sendMessage(
-                targetId,
-                `💰 <b>BIẾN ĐỘNG SỐ DƯ VÍ</b>\n\n` +
-                `Tài khoản ví tích điểm của bạn đã bị trừ: <b>-${formatPrice(amount)}</b>.\n` +
-                `💵 Số dư hiện tại: <b>${formatPrice(updatedUser.balance)}</b>.`,
-                { parse_mode: 'HTML' }
-            );
+            const isZalo = targetIdStr.length >= 12;
+            if (isZalo) {
+                const zaloBotService = require('../services/zaloBotService');
+                await zaloBotService.sendMessage(
+                    targetIdStr,
+                    `💰 <b>BIẾN ĐỘNG SỐ DƯ VÍ</b>\n\n` +
+                    `Tài khoản ví tích điểm của bạn đã bị trừ: <b>-${formatPrice(amount)}</b>.\n` +
+                    `💵 Số dư hiện tại: <b>${formatPrice(updatedUser.balance)}</b>.`,
+                    'html'
+                );
+            } else {
+                await bot.telegram.sendMessage(
+                    targetIdStr,
+                    `💰 <b>BIẾN ĐỘNG SỐ DƯ VÍ</b>\n\n` +
+                    `Tài khoản ví tích điểm của bạn đã bị trừ: <b>-${formatPrice(amount)}</b>.\n` +
+                    `💵 Số dư hiện tại: <b>${formatPrice(updatedUser.balance)}</b>.`,
+                    { parse_mode: 'HTML' }
+                );
+            }
         } catch (err) {
             console.error('Failed to notify customer of manual balance debit:', err.message);
         }

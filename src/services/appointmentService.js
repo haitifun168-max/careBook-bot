@@ -22,7 +22,7 @@ const appointmentService = {
    */
   getById(id) {
     return db.prepare(`
-      SELECT a.*, p.name as package_name, p.emoji as package_emoji
+      SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name, p.emoji as package_emoji
       FROM appointments a
       JOIN products p ON a.package_id = p.id
       WHERE a.id = ?
@@ -35,7 +35,7 @@ const appointmentService = {
   getByPaymentCode(code) {
     const cleanCode = code.replace(/[-\s]/g, '').toUpperCase();
     return db.prepare(`
-      SELECT a.*, p.name as package_name, p.emoji as package_emoji
+      SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name, p.emoji as package_emoji
       FROM appointments a
       JOIN products p ON a.package_id = p.id
       WHERE REPLACE(REPLACE(a.payment_code, '-', ''), ' ', '') = ?
@@ -47,14 +47,14 @@ const appointmentService = {
    */
   getPendingByUser(userId) {
     return db.prepare(`
-      SELECT a.*, p.name as package_name
+      SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name
       FROM appointments a
       JOIN products p ON a.package_id = p.id
       WHERE a.user_id = ? 
         AND a.status = 'pending' 
         AND a.created_at >= datetime('now', '-15 minutes')
       ORDER BY a.created_at DESC
-    `).all(userId);
+    `).all(String(userId));
   },
 
   /**
@@ -62,13 +62,13 @@ const appointmentService = {
    */
   getRecentByUser(userId, limit = 5) {
     return db.prepare(`
-      SELECT a.*, p.name as package_name
+      SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name
       FROM appointments a
       JOIN products p ON a.package_id = p.id
       WHERE a.user_id = ?
       ORDER BY a.created_at DESC
       LIMIT ?
-    `).all(userId, limit);
+    `).all(String(userId), limit);
   },
 
   /**

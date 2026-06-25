@@ -6,7 +6,7 @@
     "scripts": {
         "start": "node src/bot.js",
         "dev": "node --watch src/bot.js",
-        "test": "node --test tests/**/*.test.js"
+        "test": "node --test --test-concurrency=1 tests/**/*.test.js"
     },
     "dependencies": {
         "better-sqlite3": "^11.7.0",

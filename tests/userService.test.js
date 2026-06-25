@@ -23,14 +23,14 @@ test.describe('UserService Tests', () => {
     test('findOrCreate - should create new user if not exists', () => {
         const user = userService.findOrCreate(testUser);
         assert.ok(user);
-        assert.strictEqual(user.telegram_id, testUser.id);
+        assert.strictEqual(user.telegram_id, String(testUser.id));
         assert.strictEqual(user.username, testUser.username);
         assert.strictEqual(user.full_name, 'Nguyen Van Test');
         assert.strictEqual(user.balance, 0);
 
         // Find existing user
         const existingUser = userService.findOrCreate(testUser);
-        assert.strictEqual(existingUser.telegram_id, testUser.id);
+        assert.strictEqual(existingUser.telegram_id, String(testUser.id));
         assert.strictEqual(existingUser.balance, 0);
     });
 
@@ -39,7 +39,7 @@ test.describe('UserService Tests', () => {
         userService.findOrCreate(testUser);
         const retrieved = userService.get(testUser.id);
         assert.ok(retrieved);
-        assert.strictEqual(retrieved.telegram_id, testUser.id);
+        assert.strictEqual(retrieved.telegram_id, String(testUser.id));
 
         const nonExistent = userService.get(99999999);
         assert.strictEqual(nonExistent, undefined);

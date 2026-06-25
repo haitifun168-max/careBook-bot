@@ -185,12 +185,14 @@
   },
   "active": "038e22d3f3887506",
   "lastOpenFiles": [
+    "data/shop.db-shm",
+    "data/shop.db-wal",
+    "scratch_test_math.js",
+    "scratch_test_flow.js",
     "output/sales_proposal.md",
     "output/HUONG_DAN_SU_DUNG.md",
     "src/public/hero_mockup.png",
     "README_EN.md",
-    "data/shop.db-shm",
-    "data/shop.db-wal",
     "scratch_set_commands.js",
     "scratch_set_webhook.js",
     "careBook-bot",
@@ -198,7 +200,6 @@
     "tests/zaloBot.test.js",
     "src/services/zaloBotService.js",
     "tests/webhookService.test.js",
-    "tests/appointmentService.test.js",
     "README.md",
     "HUONG_DAN_SU_DUNG.md"
   ]

@@ -48,7 +48,7 @@ test.describe('AppointmentService Tests', () => {
 
         const created = appointmentService.create(appointmentData);
         assert.ok(created);
-        assert.strictEqual(created.user_id, testUser.id);
+        assert.strictEqual(created.user_id, String(testUser.id));
         assert.strictEqual(created.patient_name, 'Test Patient');
         assert.strictEqual(created.status, 'pending');
 

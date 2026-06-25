@@ -67,8 +67,8 @@ test.describe('WebhookService and Express API Tests', () => {
         db.prepare('DELETE FROM appointments WHERE user_id = ?').run(testUser.id);
         db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testUser.id);
         db.prepare("DELETE FROM deposits WHERE payment_code IN ('CB-3BJMSZ5PVOJW4', 'CB-U9HBDMOJV9ZZ', 'CB3BJMSZ5PVOJW4', 'CBU9HBDMOJV9ZZ')").run();
-        db.prepare('DELETE FROM deposits WHERE user_id = 530718471553674176').run();
-        db.prepare('DELETE FROM users WHERE telegram_id = 530718471553674176').run();
+        db.prepare("DELETE FROM deposits WHERE user_id = '530718471553674179'").run();
+        db.prepare("DELETE FROM users WHERE telegram_id = '530718471553674179'").run();
         db.prepare('UPDATE users SET balance = 0 WHERE telegram_id = ?').run(testUser.id);
         sentTelegramMessages.length = 0;
     });
@@ -206,7 +206,7 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.strictEqual(updatedApt.status, 'confirmed');
 
         // Check notification mentions restoration
-        const userMsg = sentTelegramMessages.find(m => m.chatId === testUser.id);
+        const userMsg = sentTelegramMessages.find(m => String(m.chatId) === String(testUser.id));
         assert.ok(userMsg.text.includes('KHÔI PHỤC'));
     });
 
@@ -278,7 +278,7 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.strictEqual(user.balance, product.deposit_amount);
 
         // Notification must contain wallet refund info
-        const userMsg = sentTelegramMessages.find(m => m.chatId === testUser.id);
+        const userMsg = sentTelegramMessages.find(m => String(m.chatId) === String(testUser.id));
         assert.ok(userMsg.text.includes('HOÀN CỌC VÀO VÍ'));
     });
 
@@ -362,7 +362,7 @@ test.describe('WebhookService and Express API Tests', () => {
 
         // 2. Test static Zalo ID deposit (we will register a temporary Zalo user)
         const testZaloUser = {
-            id: 530718471553674179,
+            id: '530718471553674179',
             username: 'test_zalo_static',
             first_name: 'Lan',
             last_name: 'Huong'
