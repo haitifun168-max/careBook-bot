@@ -120,12 +120,14 @@ async function handleZaloMessage(chatId, text, fromUser) {
                 `👤 Chủ tài khoản: <b>${b.ACCOUNT_NAME}</b>\n` +
                 `💵 Số tiền nạp: <b>Tùy ý (Ví dụ: 100.000đ)</b>\n` +
                 `🔑 Nội dung chuyển khoản (bắt buộc): <code>${paymentCode}</code>\n\n` +
+                `🔗 <b>Link quét mã QR:</b> <a href="${qrUrl}">Nhấn vào đây để xem ảnh QR nạp tiền</a>\n\n` +
                 `⚠️ <i>Lưu ý: Bạn bắt buộc phải ghi đúng nội dung chuyển khoản ở trên để hệ thống tự động ghi nhận số dư ví cho bạn trong vòng 3-5 giây.</i>`;
 
             try {
                 await zaloBotService.sendPhoto(chatId, qrUrl, `Quét mã QR để nạp tiền vào ví tích điểm nhanh`);
                 await zaloBotService.sendMessage(chatId, depositMsg, 'html');
             } catch (err) {
+                console.error('❌ Lỗi khi gửi ảnh QR nạp tiền qua sendPhoto:', err.message);
                 await zaloBotService.sendMessage(chatId, depositMsg, 'html');
             }
             return;
@@ -433,12 +435,14 @@ async function handleZaloMessage(chatId, text, fromUser) {
                 `💳 Số tài khoản: <code>${config.BANK.ACCOUNT}</code>\n` +
                 `💵 Số tiền cọc: <b>${formatPrice(product.deposit_amount)}</b>\n` +
                 `🔑 Nội dung chuyển khoản (bắt buộc): <code>${paymentCode}</code>\n\n` +
+                `🔗 <b>Link quét mã QR:</b> <a href="${qrUrl}">Nhấn vào đây để xem ảnh QR đặt cọc</a>\n\n` +
                 `⚠️ <i>Lưu ý: Khung giờ của bạn được tạm khóa giữ chỗ trong 15 phút. Sau 15 phút nếu không nhận được tiền cọc, hệ thống sẽ tự động hủy lịch để giải phóng khung giờ.</i>`;
 
             try {
                 await zaloBotService.sendPhoto(chatId, qrUrl, `Quét mã VietQR để thanh toán cọc giữ chỗ khám`);
                 await zaloBotService.sendMessage(chatId, payInstructions, 'html');
             } catch (err) {
+                console.error('❌ Lỗi khi gửi ảnh QR đặt cọc qua sendPhoto:', err.message);
                 await zaloBotService.sendMessage(chatId, payInstructions, 'html');
             }
 
