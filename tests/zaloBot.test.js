@@ -113,52 +113,175 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         assert.ok(lastFetchCall.options.body.text.includes('CHÀO MỪNG BẠN ĐẾN VỚI'));
     });
 
-    test('POST /webhook/zalo booking flow - selecting product and showing dates', async () => {
-        // Gửi "1" để chọn đặt lịch
-        const payloadStart = {
-            update_id: 1000,
-            message: {
-                message_id: 889,
-                chat: { id: '123456789' },
-                text: '1',
-                from: { first_name: 'Minh', last_name: 'An', id: '123456789' }
-            }
-        };
+    test('POST /webhook/zalo menu items 2-7', async () => {
+        const menuItems = [
+            { text: '2', expected: 'thông tin bệnh nhân zalo' },
+            { text: '3', expected: 'danh sách dịch vụ & gói khám' },
+            { text: '4', expected: 'hướng dẫn nạp tiền vào ví' },
+            { text: '5', expected: 'lịch hẹn' },
+            { text: '6', expected: 'hỗ trợ y tế & thông tin phòng khám' },
+            { text: '7', expected: 'zalo id của bạn là' }
+        ];
 
+        for (const item of menuItems) {
+            const payload = {
+                update_id: 1100,
+                message: {
+                    message_id: 900,
+                    chat: { id: '123456789' },
+                    text: item.text,
+                    from: { first_name: 'Minh', last_name: 'An', id: '123456789' }
+                }
+            };
+
+            const response = await originalFetch(`${baseUrl}/webhook/zalo`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123'
+                },
+                body: JSON.stringify(payload)
+            });
+            assert.strictEqual(response.status, 200);
+
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            assert.ok(lastFetchCall);
+            assert.ok(lastFetchCall.options.body.text.toLowerCase().includes(item.expected), `Expected text to contain: ${item.expected}`);
+        }
+    });
+
+    test('POST /webhook/zalo Case 2: Complete booking flow (Venus, Date 3, Slot 1, Relative, VietQR)', async () => {
+        const chatId = '987654321';
+        
+        // 1. Send "1" (dat lich)
         await originalFetch(`${baseUrl}/webhook/zalo`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123'
-            },
-            body: JSON.stringify(payloadStart)
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 2000,
+                message: { message_id: 200, chat: { id: chatId }, text: '1', from: { id: chatId, first_name: 'Lan' } }
+            })
         });
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 50));
         assert.ok(lastFetchCall.options.body.text.includes('DANH SÁCH DỊCH VỤ & GÓI KHÁM'));
 
-        // Gửi "1" để chọn gói khám đầu tiên
-        const payloadSelectProduct = {
-            update_id: 1001,
-            message: {
-                message_id: 890,
-                chat: { id: '123456789' },
-                text: '1',
-                from: { first_name: 'Minh', last_name: 'An', id: '123456789' }
-            }
-        };
-
+        // 2. Select package 2 (Bọc răng sứ Venus)
         await originalFetch(`${baseUrl}/webhook/zalo`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123'
-            },
-            body: JSON.stringify(payloadSelectProduct)
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 2001,
+                message: { message_id: 201, chat: { id: chatId }, text: '2', from: { id: chatId } }
+            })
         });
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(lastFetchCall.options.body.text.includes('Bọc răng sứ Venus'));
         assert.ok(lastFetchCall.options.body.text.includes('CHỌN NGÀY KHÁM MONG MUỐN'));
+
+        // 3. Select date 3
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 2002,
+                message: { message_id: 202, chat: { id: chatId }, text: '3', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(lastFetchCall.options.body.text.includes('CHỌN KHUNG GIỜ KHÁM TRỐNG'));
+
+        // 4. Select hour slot 1
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 2003,
+                message: { message_id: 203, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(lastFetchCall.options.body.text.includes('BẠN MUỐN ĐĂNG KÝ ĐẶT LỊCH KHÁM CHO AI'));
+
+        // 5. Select relative "2"
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 2004,
+                message: { message_id: 204, chat: { id: chatId }, text: '2', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(lastFetchCall.options.body.text.includes('Họ tên đầy đủ'));
+
+        // 6. Enter name "Trần Thị B"
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 2005,
+                message: { message_id: 205, chat: { id: chatId }, text: 'Trần Thị B', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(lastFetchCall.options.body.text.includes('Số điện thoại'));
+
+        // 7. Enter phone "0988777666"
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 2006,
+                message: { message_id: 206, chat: { id: chatId }, text: '0988777666', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(lastFetchCall.options.body.text.includes('XÁC NHẬN THÔNG TIN ĐẶT LỊCH HẸN'));
+        assert.ok(lastFetchCall.options.body.text.includes('Trần Thị B'));
+        assert.ok(lastFetchCall.options.body.text.includes('0988777666'));
+
+        // 8. Select payment method 1 (VietQR cọc)
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 2007,
+                message: { message_id: 207, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        
+        // Assert QR instructions and admin notification are sent
+        assert.ok(lastFetchCall.options.body.text.includes('LỊCH ĐĂNG KÝ MỚI'));
+        assert.ok(lastFetchCall.options.body.text.includes('NAP PAY-'));
+    });
+
+    test('POST /webhook/zalo Case 3: Booking flow cancellation (huy)', async () => {
+        const chatId = '11223344';
+        
+        // Start flow
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 3000,
+                message: { message_id: 300, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(lastFetchCall.options.body.text.includes('DANH SÁCH DỊCH VỤ & GÓI KHÁM'));
+
+        // Cancel
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 3001,
+                message: { message_id: 301, chat: { id: chatId }, text: 'huy', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(lastFetchCall.options.body.text.includes('Bạn đã hủy bỏ tiến trình đặt lịch'));
     });
 
     test('POST /webhook/zalo rejects invalid webhook secret', async () => {
