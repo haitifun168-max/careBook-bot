@@ -178,14 +178,14 @@ async function handleZaloMessage(chatId, text, fromUser) {
 
         if (normalizedText === '/xinchao' || normalizedText === 'xinchao') {
             // Show welcome message
-            const welcomeMsg = `👋 Chào mừng bạn đến với <b>${config.SHOP_NAME}</b>!\n` +
+            const welcomeMsg = `👋 Chào mừng bạn đến với <b>ĐẶT LỊCH TỰ ĐỘNG!</b>\n` +
                                `Tôi là trợ lý đặt lịch tự động của phòng khám.`;
             await zaloBotService.sendMessage(chatId, welcomeMsg, 'html');
         }
 
         // Default Main Menu Response
         const mainMenu = 
-            `📅 <b>CHÀO MỪNG BẠN ĐẾN VỚI ${config.SHOP_NAME.toUpperCase()}!</b>\n` +
+            `📅 <b>CHÀO MỪNG BẠN ĐẾN VỚI ĐẶT LỊCH TỰ ĐỘNG!</b>\n` +
             `Hệ thống đặt lịch khám tự động qua Zalo Bot. Vui lòng chọn một số hoặc gõ lệnh tương ứng để tiếp tục:\n\n` +
             `1️⃣ <b>dat lich</b> - Đặt lịch khám mới\n` +
             `2️⃣ <b>thong tin</b> - Xem thông tin bệnh nhân & số dư ví\n` +
