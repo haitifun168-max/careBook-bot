@@ -58,6 +58,12 @@ async function handleZaloMessage(chatId, text, fromUser) {
                 tempProducts: products
             };
 
+            if (normalizedText !== '1') {
+                const welcomeMsg = `👋 Chào mừng bạn đến với <b>ĐẶT LỊCH TỰ ĐỘNG!</b>\n` +
+                                   `Tôi là trợ lý đặt lịch tự động của phòng khám.`;
+                await zaloBotService.sendMessage(chatId, welcomeMsg, 'html');
+            }
+
             let menuMsg = '🩺 <b>DANH SÁCH DỊCH VỤ & GÓI KHÁM</b>\n\n';
             products.forEach((prod, index) => {
                 menuMsg += `<b>[${index + 1}]</b> ${prod.emoji || '🩺'} <b>${prod.name}</b>\n`;
@@ -176,7 +182,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
-        const startCommands = ['/start', 'start', '/xinchao', 'xinchao', 'bắt đầu', 'bat dau', 'batdau', 'hello', 'hi', 'chào', 'chao'];
+        const startCommands = ['/start', 'start', '/xinchao', 'xinchao', 'bắt đầu', 'bat dau', 'batdau', 'hello', 'hi', 'chào', 'chao', 'dat lich', 'datlich', 'đặt lịch'];
         if (startCommands.includes(normalizedText)) {
             // Show welcome message
             const welcomeMsg = `👋 Chào mừng bạn đến với <b>ĐẶT LỊCH TỰ ĐỘNG!</b>\n` +

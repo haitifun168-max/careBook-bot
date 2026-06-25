@@ -146,6 +146,58 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         assert.ok(lastFetchCall.options.body.text.includes('CHÀO MỪNG BẠN ĐẾN VỚI'));
     });
 
+    test('POST /webhook/zalo text booking command Đặt lịch triggers booking flow and welcome message', async () => {
+        const payload = {
+            update_id: 1001,
+            message: {
+                message_id: 890,
+                chat: {
+                    id: '123456789'
+                },
+                text: 'Đặt lịch',
+                from: {
+                    first_name: 'Minh',
+                    last_name: 'An',
+                    id: '123456789'
+                }
+            }
+        };
+
+        const response = await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        assert.strictEqual(response.status, 200);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        assert.ok(lastFetchCall);
+        assert.ok(lastFetchCall.options.body.text.includes('DANH SÁCH DỊCH VỤ & GÓI KHÁM'));
+
+        // Dọn dẹp session bằng cách gửi "huy"
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123'
+            },
+            body: JSON.stringify({
+                update_id: 1002,
+                message: {
+                    message_id: 891,
+                    chat: { id: '123456789' },
+                    text: 'huy',
+                    from: { id: '123456789' }
+                }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
     test('POST /webhook/zalo menu items 2-7', async () => {
         const menuItems = [
             { text: '2', expected: 'thông tin bệnh nhân zalo' },
