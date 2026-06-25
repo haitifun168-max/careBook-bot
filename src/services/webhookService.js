@@ -744,18 +744,50 @@ function startWebhookServer(bot) {
 
         // Xử lý tin nhắn bất đồng bộ
         try {
-            if (update && update.message && update.message.chat && update.message.chat.id) {
-                const chatId = update.message.chat.id;
-                const text = update.message.text;
-                const fromUser = update.message.from;
-                const senderName = fromUser ? `${fromUser.first_name || ''} ${fromUser.last_name || ''}`.trim() : 'N/A';
+            if (!update) return;
 
-                console.log(`💬 Tin nhắn Zalo từ [${senderName}] (ChatID: ${chatId}): "${text || ''}"`);
+            // 1. Trích xuất Chat ID (hoặc Sender ID của Zalo)
+            let chatId = null;
+            if (update.message && update.message.chat && update.message.chat.id) {
+                chatId = String(update.message.chat.id);
+            } else if (update.sender && update.sender.id) {
+                chatId = String(update.sender.id);
+            }
 
-                if (text) {
-                    const zaloBookingHandler = require('../handlers/zaloBookingHandler');
-                    await zaloBookingHandler.handleZaloMessage(chatId, text, fromUser);
+            if (!chatId) return;
+
+            // 2. Trích xuất nội dung tin nhắn hoặc số điện thoại danh bạ/danh thiếp
+            let text = null;
+            if (update.message) {
+                if (update.message.text) {
+                    text = update.message.text;
+                } else if (update.message.contact && update.message.contact.phone_number) {
+                    text = update.message.contact.phone_number;
+                } else if (update.message.attachments && Array.isArray(update.message.attachments)) {
+                    // Trích xuất số điện thoại từ đính kèm danh thiếp (business_card)
+                    const card = update.message.attachments.find(a => a.type === 'business_card');
+                    if (card && card.payload && card.payload.phone) {
+                        text = card.payload.phone;
+                    }
                 }
+            }
+
+            // Hỗ trợ bổ sung định dạng Zalo OA event raw (không qua adapter)
+            if (!text && update.event_name === 'user_send_business_card' && update.message && update.message.attachments) {
+                const card = update.message.attachments.find(a => a.type === 'business_card');
+                if (card && card.payload && card.payload.phone) {
+                    text = card.payload.phone;
+                }
+            }
+
+            const fromUser = (update.message && update.message.from) || { id: chatId };
+            const senderName = fromUser ? `${fromUser.first_name || ''} ${fromUser.last_name || ''}`.trim() : 'N/A';
+
+            console.log(`💬 Tin nhắn Zalo trích xuất từ [${senderName}] (ChatID: ${chatId}): "${text || ''}"`);
+
+            if (text) {
+                const zaloBookingHandler = require('../handlers/zaloBookingHandler');
+                await zaloBookingHandler.handleZaloMessage(chatId, text, fromUser);
             }
         } catch (err) {
             console.error('❌ Lỗi xử lý Webhook Zalo:', err.message);

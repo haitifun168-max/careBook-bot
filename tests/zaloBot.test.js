@@ -369,6 +369,106 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         assert.ok(lastFetchCall.options.body.text.includes('Bạn đã hủy bỏ tiến trình đặt lịch'));
     });
 
+    test('POST /webhook/zalo parses user_send_business_card event payload', async () => {
+        const chatId = '777888999';
+
+        // 1. Start booking flow first
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 4000,
+                message: { message_id: 400, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // 2. Select package 1
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 4001,
+                message: { message_id: 401, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // 3. Select date 1
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 4002,
+                message: { message_id: 402, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // 4. Select slot 1
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 4003,
+                message: { message_id: 403, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // 5. Select patient type self (1)
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 4004,
+                message: { message_id: 404, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Send business card payload
+        const businessCardPayload = {
+            event_name: 'user_send_business_card',
+            sender: {
+                id: chatId
+            },
+            message: {
+                msg_id: 'msg_bc_123',
+                attachments: [
+                    {
+                        type: 'business_card',
+                        payload: {
+                            phone: '0977666555'
+                        }
+                    }
+                ]
+            }
+        };
+
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify(businessCardPayload)
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        assert.ok(lastFetchCall);
+        assert.ok(lastFetchCall.options.body.text.includes('BẢNG XÁC NHẬN THÔNG TIN ĐẶT LỊCH HẸN'));
+        assert.ok(lastFetchCall.options.body.text.includes('0977666555'));
+
+        // Clean up session
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 4006,
+                message: { message_id: 406, chat: { id: chatId }, text: 'huy', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
     test('POST /webhook/zalo rejects invalid webhook secret', async () => {
         const response = await originalFetch(`${baseUrl}/webhook/zalo`, {
             method: 'POST',
