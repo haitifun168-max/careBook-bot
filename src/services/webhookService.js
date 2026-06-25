@@ -61,6 +61,13 @@ function startWebhookServer(bot) {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
+    // Register Telegram Webhook if bot has webhookCallback method
+    if (config.BOT_TOKEN && config.BOT_TOKEN !== 'your_bot_token_here' && typeof bot.webhookCallback === 'function') {
+        const telegramSecretPath = `/webhook/telegram-${config.BOT_TOKEN.slice(0, 10)}`;
+        app.use(bot.webhookCallback(telegramSecretPath));
+        console.log(`📢 Telegram Webhook path registered at: ${telegramSecretPath}`);
+    }
+
     // Middleware to check authentication and authorization (RBAC)
     function checkRole(allowedRoles) {
         return (req, res, next) => {

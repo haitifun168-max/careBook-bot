@@ -14,7 +14,17 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         // Configure test configurations
         config.ZALO_BOT_TOKEN = 'test_zalo_token_123';
         config.ZALO_BOT_SECRET_TOKEN = 'test_zalo_secret_token_123';
+        config.ADMIN_ID = '99999999';
         config.WEBHOOK_PORT = 0; // OS assigns random free port
+
+        // Ensure admin user exists in DB
+        const userService = require('../src/services/userService');
+        userService.findOrCreate({
+            id: config.ADMIN_ID,
+            username: 'admin_test',
+            first_name: 'Admin',
+            last_name: 'Test'
+        });
 
         // Start server with mock bot
         const mockBot = {};
@@ -54,6 +64,10 @@ test.describe('Zalo Chatbot Integration Tests', () => {
     test.after(async () => {
         // Restore fetch
         globalThis.fetch = originalFetch;
+
+        // Clean up test admin user from DB
+        const db = require('../src/database');
+        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(String(config.ADMIN_ID));
 
         // Stop server
         if (server) {

@@ -64,20 +64,20 @@ test.describe('WebhookService and Express API Tests', () => {
 
     test.beforeEach(() => {
         // Clear collections and DB records for our test user
-        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(testUser.id);
-        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testUser.id);
+        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(String(testUser.id));
+        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(String(testUser.id));
         db.prepare("DELETE FROM deposits WHERE payment_code IN ('CB-3BJMSZ5PVOJW4', 'CB-U9HBDMOJV9ZZ', 'CB3BJMSZ5PVOJW4', 'CBU9HBDMOJV9ZZ')").run();
         db.prepare("DELETE FROM deposits WHERE user_id = '530718471553674179'").run();
         db.prepare("DELETE FROM users WHERE telegram_id = '530718471553674179'").run();
-        db.prepare('UPDATE users SET balance = 0 WHERE telegram_id = ?').run(testUser.id);
+        db.prepare('UPDATE users SET balance = 0 WHERE telegram_id = ?').run(String(testUser.id));
         sentTelegramMessages.length = 0;
     });
 
     test.after(async () => {
         // Clean up test user & appointments from DB
-        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(testUser.id);
-        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testUser.id);
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testUser.id);
+        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(String(testUser.id));
+        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(String(testUser.id));
+        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(String(testUser.id));
         
         // Stop server
         if (server) {
@@ -290,7 +290,7 @@ test.describe('WebhookService and Express API Tests', () => {
         db.prepare(`
             INSERT INTO deposits (user_id, amount, payment_code, status)
             VALUES (?, ?, ?, 'pending')
-        `).run(testUser.id, depositAmount, paymentCode);
+        `).run(String(testUser.id), depositAmount, paymentCode);
 
         // Request SePay Webhook
         const res = await fetch(`${baseUrl}/webhook/sepay`, {
@@ -391,9 +391,42 @@ test.describe('WebhookService and Express API Tests', () => {
         const zaloUser = userService.get(testZaloUser.id);
         assert.strictEqual(zaloUser.balance, depositAmount);
 
-        // Clean up test Zalo user
+        // 3. Test static Zalo Hex ID deposit (we will register a temporary Zalo user with hex ID)
+        const testZaloHexUser = {
+            id: 'f7a6098c9bc5729b2bd4',
+            username: 'test_zalo_hex',
+            first_name: 'Minh',
+            last_name: 'Thanh'
+        };
+        userService.findOrCreate(testZaloHexUser);
+        
+        const staticZaloHexCode = `${cleanPrefix}${paymentService.encryptUserId(testZaloHexUser.id)}`;
+
+        const resZaloHex = await fetch(`${baseUrl}/webhook/sepay`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Apikey test-secret-key'
+            },
+            body: JSON.stringify({
+                content: `Nạp ví Zalo Hex: ${staticZaloHexCode}`,
+                transferAmount: depositAmount
+            })
+        });
+
+        assert.strictEqual(resZaloHex.status, 200);
+        const dataZaloHex = await resZaloHex.json();
+        assert.strictEqual(dataZaloHex.success, true);
+
+        // Check Zalo hex user balance is credited
+        const zaloHexUser = userService.get(testZaloHexUser.id);
+        assert.strictEqual(zaloHexUser.balance, depositAmount);
+
+        // Clean up test Zalo users
         db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testZaloUser.id);
         db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testZaloUser.id);
+        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testZaloHexUser.id);
+        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testZaloHexUser.id);
     });
 
     test('SSO Login - single use and expiration validation', async () => {

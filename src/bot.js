@@ -62,34 +62,58 @@ bot.telegram.setMyCommands([
 // Import appointment service for startup cleanup
 const appointmentService = require('./services/appointmentService');
 
-// Launch bot
-bot.launch()
-    .then(() => {
-        console.log(`🤖 ${config.SHOP_NAME} Bot đã khởi động!`);
-        console.log(`👤 Admin ID: ${config.ADMIN_ID}`);
-        console.log(`🏦 Bank: ${config.BANK.NAME} - ${config.BANK.ACCOUNT}`);
-        
-        // Cleanup expired appointments on startup
-        try {
-            appointmentService.cleanupExpiredAppointments();
-            console.log('🧹 Đã dọn dẹp các lịch hẹn chờ cọc hết hạn lúc khởi động.');
-        } catch (e) {
-            console.error('⚠️ Không thể dọn dẹp lịch hẹn hết hạn:', e.message);
-        }
-        
-        // Fetch and save bot username dynamically
-        bot.telegram.getMe().then((me) => {
-            config.BOT_USERNAME = me.username;
-            console.log(`👤 Bot Username: @${me.username}`);
-        }).catch((err) => {
-            console.error('⚠️ Không thể lấy thông tin Bot Username:', err.message);
-        });
-    })
-    .catch((err) => {
-        console.error('❌ Không thể khởi động bot:', err.message);
-        console.error('💡 Kiểm tra lại BOT_TOKEN trong file .env');
-        process.exit(1);
+// Post-launch successful setup tasks
+const runStartupTasks = () => {
+    console.log(`🤖 ${config.SHOP_NAME} Bot đã sẵn sàng!`);
+    console.log(`👤 Admin ID: ${config.ADMIN_ID}`);
+    console.log(`🏦 Bank: ${config.BANK.NAME} - ${config.BANK.ACCOUNT}`);
+    
+    // Cleanup expired appointments on startup
+    try {
+        appointmentService.cleanupExpiredAppointments();
+        console.log('🧹 Đã dọn dẹp các lịch hẹn chờ cọc hết hạn lúc khởi động.');
+    } catch (e) {
+        console.error('⚠️ Không thể dọn dẹp lịch hẹn hết hạn:', e.message);
+    }
+    
+    // Fetch and save bot username dynamically
+    bot.telegram.getMe().then((me) => {
+        config.BOT_USERNAME = me.username;
+        console.log(`👤 Bot Username: @${me.username}`);
+    }).catch((err) => {
+        console.error('⚠️ Không thể lấy thông tin Bot Username:', err.message);
     });
+};
+
+// Check if PUBLIC_URL is configured (Render/Production webhook mode)
+if (config.PUBLIC_URL && config.PUBLIC_URL !== 'your_public_url_here') {
+    const telegramSecretPath = `/webhook/telegram-${config.BOT_TOKEN.slice(0, 10)}`;
+    const webhookUrl = `${config.PUBLIC_URL.replace(/\/$/, '')}${telegramSecretPath}`;
+    
+    bot.telegram.setWebhook(webhookUrl)
+        .then(() => {
+            console.log(`🤖 Telegram Bot đang chạy ở chế độ WEBHOOK!`);
+            console.log(`🔗 Webhook URL: ${webhookUrl}`);
+            runStartupTasks();
+        })
+        .catch((err) => {
+            console.error('❌ Không thể cấu hình Telegram Webhook:', err.message);
+            console.error('💡 Kiểm tra lại BOT_TOKEN trong file .env hoặc kết nối mạng.');
+            process.exit(1);
+        });
+} else {
+    // Local / Development polling mode
+    bot.launch()
+        .then(() => {
+            console.log(`🤖 Telegram Bot đang chạy ở chế độ POLLING (getUpdates)!`);
+            runStartupTasks();
+        })
+        .catch((err) => {
+            console.error('❌ Không thể khởi động bot ở chế độ Polling:', err.message);
+            console.error('💡 Kiểm tra lại BOT_TOKEN trong file .env');
+            process.exit(1);
+        });
+}
 
 // Start Webhook server
 const { startWebhookServer } = require('./services/webhookService');

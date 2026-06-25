@@ -20,7 +20,7 @@ module.exports = (bot) => {
 
         // Record deposit request in database
         db.prepare('INSERT INTO deposits (user_id, amount, payment_code) VALUES (?, ?, ?)')
-          .run(ctx.from.id, amount, payment.paymentCode);
+          .run(String(ctx.from.id), amount, payment.paymentCode);
 
         const cleanPrefix = (config.PAYMENT_PREFIX || 'CB').replace(/[-\s]/g, '');
         const staticCode = `${cleanPrefix}${paymentService.encryptUserId(ctx.from.id)}`;

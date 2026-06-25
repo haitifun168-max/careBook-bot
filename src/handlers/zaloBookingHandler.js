@@ -461,8 +461,8 @@ async function handleZaloMessage(chatId, text, fromUser) {
                 `💵 Tiền cọc: <b>${formatPrice(product.deposit_amount)}</b>\n` +
                 `🔑 Mã nội dung: <code>${paymentCode}</code>\n\n` +
                 `⏱️ <i>Lịch giữ chỗ sẽ tự động hủy sau 15 phút nếu khách chưa chuyển khoản cọc.</i>`;
-            db.prepare('SELECT telegram_id FROM users WHERE telegram_id = ?').get(config.ADMIN_ID) && 
-                zaloBotService.sendMessage(config.ADMIN_ID, adminMsg, 'html').catch(() => {});
+            db.prepare('SELECT telegram_id FROM users WHERE telegram_id = ?').get(String(config.ADMIN_ID)) && 
+                zaloBotService.sendMessage(String(config.ADMIN_ID), adminMsg, 'html').catch(() => {});
 
             // 15-Minute Expiration Timer for Zalo
             const timer = setTimeout(async () => {

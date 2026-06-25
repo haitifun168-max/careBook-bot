@@ -28,7 +28,7 @@ const userService = {
      * Update balance
      */
     addBalance(telegramId, amount) {
-        db.prepare('UPDATE users SET balance = balance + ? WHERE telegram_id = ?').run(amount, telegramId);
+        db.prepare('UPDATE users SET balance = balance + ? WHERE telegram_id = ?').run(amount, String(telegramId));
     },
 
     /**
@@ -37,7 +37,7 @@ const userService = {
     deductBalance(telegramId, amount) {
         const user = this.get(telegramId);
         if (!user || user.balance < amount) return false;
-        db.prepare('UPDATE users SET balance = balance - ? WHERE telegram_id = ?').run(amount, telegramId);
+        db.prepare('UPDATE users SET balance = balance - ? WHERE telegram_id = ?').run(amount, String(telegramId));
         return true;
     },
 };

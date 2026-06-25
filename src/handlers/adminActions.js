@@ -87,7 +87,7 @@ module.exports = (bot) => {
         const targetIdStr = args[1];
         const amount = parseInt(args[2]);
 
-        if (!targetIdStr || !/^\d+$/.test(targetIdStr) || isNaN(amount) || amount <= 0) {
+        if (!targetIdStr || !/^[a-zA-Z0-9_\-]+$/.test(targetIdStr) || isNaN(amount) || amount <= 0) {
             return ctx.reply('❌ Telegram/Zalo ID hoặc Số tiền không hợp lệ.');
         }
 
@@ -142,7 +142,7 @@ module.exports = (bot) => {
         const targetIdStr = args[1];
         const amount = parseInt(args[2]);
 
-        if (!targetIdStr || !/^\d+$/.test(targetIdStr) || isNaN(amount) || amount <= 0) {
+        if (!targetIdStr || !/^[a-zA-Z0-9_\-]+$/.test(targetIdStr) || isNaN(amount) || amount <= 0) {
             return ctx.reply('❌ Telegram/Zalo ID hoặc Số tiền không hợp lệ.');
         }
 

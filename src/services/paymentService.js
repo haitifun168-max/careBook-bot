@@ -49,14 +49,21 @@ const paymentService = {
      */
     encryptUserId(userId) {
         if (!userId) return '';
-        const val = BigInt(userId);
+        const idStr = String(userId).trim();
+        const isHex = !/^\d+$/.test(idStr);
+        let val;
+        if (isHex) {
+            val = BigInt('0x' + idStr);
+        } else {
+            val = BigInt(idStr);
+        }
+
+        // Encode format info in the least significant bit
+        let encoded = val * 2n + (isHex ? 1n : 0n);
         const mask = config.PAYMENT_SECRET_KEY || 123456789012345678n;
         
-        // XOR với khóa bảo mật
-        let obfuscated = val ^ mask;
-        
-        // Dịch chuyển vòng tròn trái 19 bits trên số nguyên 64-bit
-        obfuscated = ((obfuscated << 19n) | (obfuscated >> 45n)) & 0xffffffffffffffffn;
+        // XOR with mask directly to support arbitrary bit lengths
+        let obfuscated = encoded ^ mask;
         
         return obfuscated.toString(36).toUpperCase();
     },
@@ -70,12 +77,16 @@ const paymentService = {
             let obfuscated = base36ToBigInt(code);
             const mask = config.PAYMENT_SECRET_KEY || 123456789012345678n;
             
-            // Dịch chuyển vòng tròn phải 19 bits (trái 45 bits) trên số nguyên 64-bit
-            obfuscated = ((obfuscated >> 19n) | (obfuscated << 45n)) & 0xffffffffffffffffn;
+            let encoded = obfuscated ^ mask;
             
-            // XOR với khóa bảo mật
-            const val = obfuscated ^ mask;
-            return val.toString();
+            const isHex = (encoded % 2n) === 1n;
+            const val = encoded / 2n;
+            
+            if (isHex) {
+                return val.toString(16);
+            } else {
+                return val.toString(10);
+            }
         } catch (e) {
             console.error('❌ Giải mã ID thất bại:', e.message);
             return null;

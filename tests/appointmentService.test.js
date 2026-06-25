@@ -25,12 +25,12 @@ test.describe('AppointmentService Tests', () => {
 
     test.beforeEach(() => {
         // Clean up any appointments for our test user
-        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(testUser.id);
+        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(String(testUser.id));
     });
 
     test.after(() => {
-        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(testUser.id);
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testUser.id);
+        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(String(testUser.id));
+        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(String(testUser.id));
     });
 
     test('create, getById, getByPaymentCode - basic workflow', () => {
@@ -178,7 +178,7 @@ test.describe('AppointmentService Tests', () => {
                 payment_code, status, created_at
             )
             VALUES (?, ?, 'Expired Patient', '0000000000', '2026-10-10', '11:00 - 12:00', ?, ?, 'TEST-EXPIRED-CODE', 'pending', datetime('now', '-20 minutes'))
-        `).run(testUser.id, product.id, product.price, product.deposit_amount);
+        `).run(String(testUser.id), product.id, product.price, product.deposit_amount);
 
         const inserted = appointmentService.getByPaymentCode('TEST-EXPIRED-CODE');
         assert.ok(inserted);

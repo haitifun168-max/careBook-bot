@@ -12,7 +12,7 @@ const appointmentService = {
         payment_code, status, created_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
-    `).run(userId, packageId, patientName, patientPhone, bookingDate, bookingTime, totalPrice, depositAmount, paymentCode);
+    `).run(String(userId), packageId, patientName, patientPhone, bookingDate, bookingTime, totalPrice, depositAmount, paymentCode);
 
     return this.getById(result.lastInsertRowid);
   },

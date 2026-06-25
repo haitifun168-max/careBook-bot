@@ -14,10 +14,91 @@ const db = new Database(path.join(dataDir, 'shop.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Run automatic migration to convert user ID columns from INTEGER to TEXT if necessary
+try {
+  const tableInfo = db.prepare("PRAGMA table_info(users)").all();
+  const idColumn = tableInfo.find(c => c.name === 'telegram_id');
+
+  if (idColumn && idColumn.type === 'INTEGER') {
+    console.log('🔄 Migrating database schema: Changing user ID columns from INTEGER to TEXT...');
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE users RENAME TO users_old;
+          ALTER TABLE appointments RENAME TO appointments_old;
+          ALTER TABLE deposits RENAME TO deposits_old;
+          
+          CREATE TABLE users (
+            telegram_id TEXT PRIMARY KEY,
+            username TEXT,
+            full_name TEXT,
+            balance INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+
+          CREATE TABLE appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            package_id INTEGER NOT NULL,
+            patient_name TEXT NOT NULL,
+            patient_phone TEXT NOT NULL,
+            booking_date TEXT NOT NULL,
+            booking_time TEXT NOT NULL,
+            total_price INTEGER NOT NULL,
+            deposit_amount INTEGER NOT NULL,
+            payment_code TEXT UNIQUE NOT NULL,
+            status TEXT DEFAULT 'pending',
+            calendar_event_id TEXT,
+            calendar_sync_status TEXT DEFAULT 'pending',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            paid_at DATETIME,
+            completed_at DATETIME,
+            FOREIGN KEY (package_id) REFERENCES products(id),
+            FOREIGN KEY (user_id) REFERENCES users(telegram_id)
+          );
+
+          CREATE TABLE deposits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            payment_code TEXT UNIQUE NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            completed_at DATETIME,
+            FOREIGN KEY (user_id) REFERENCES users(telegram_id)
+          );
+          
+          INSERT INTO users (telegram_id, username, full_name, balance, created_at)
+          SELECT CAST(telegram_id AS TEXT), username, full_name, balance, created_at FROM users_old;
+
+          INSERT INTO appointments (id, user_id, package_id, patient_name, patient_phone, booking_date, booking_time, total_price, deposit_amount, payment_code, status, calendar_event_id, calendar_sync_status, created_at, paid_at, completed_at)
+          SELECT id, CAST(user_id AS TEXT), package_id, patient_name, patient_phone, booking_date, booking_time, total_price, deposit_amount, payment_code, status, calendar_event_id, calendar_sync_status, created_at, paid_at, completed_at FROM appointments_old;
+
+          INSERT INTO deposits (id, user_id, amount, payment_code, status, created_at, completed_at)
+          SELECT id, CAST(user_id AS TEXT), amount, payment_code, status, created_at, completed_at FROM deposits_old;
+          
+          DROP TABLE users_old;
+          DROP TABLE appointments_old;
+          DROP TABLE deposits_old;
+        `);
+      })();
+      console.log('✅ Database schema migration completed successfully!');
+    } catch (error) {
+      console.error('❌ Database migration failed:', error);
+      throw error;
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  }
+} catch (e) {
+  // users table might not exist yet
+}
+
 // Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
-    telegram_id INTEGER PRIMARY KEY,
+    telegram_id TEXT PRIMARY KEY,
     username TEXT,
     full_name TEXT,
     balance INTEGER DEFAULT 0,
@@ -49,7 +130,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS appointments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
     package_id INTEGER NOT NULL,
     patient_name TEXT NOT NULL,
     patient_phone TEXT NOT NULL,
@@ -80,13 +161,13 @@ db.exec(`
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL,              -- 'admin', 'receptionist', 'doctor'
-    telegram_id INTEGER,
+    telegram_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS deposits (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
     amount INTEGER NOT NULL,
     payment_code TEXT UNIQUE NOT NULL,
     status TEXT DEFAULT 'pending',

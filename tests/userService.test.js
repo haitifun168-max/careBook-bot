@@ -13,11 +13,11 @@ test.describe('UserService Tests', () => {
 
     // Clean up before and after tests
     test.beforeEach(() => {
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testUser.id);
+        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(String(testUser.id));
     });
 
     test.after(() => {
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testUser.id);
+        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(String(testUser.id));
     });
 
     test('findOrCreate - should create new user if not exists', () => {
