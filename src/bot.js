@@ -76,6 +76,21 @@ const runStartupTasks = () => {
         .catch((e) => {
             console.error('⚠️ Không thể dọn dẹp lịch hẹn hết hạn:', e.message);
         });
+
+    // Run background jobs every 1 minute
+    setInterval(async () => {
+        try {
+            await appointmentService.cleanupExpiredAppointments();
+        } catch (e) {
+            console.error('⚠️ Lỗi dọn dẹp lịch hẹn hết hạn:', e.message);
+        }
+
+        try {
+            await appointmentService.sendBookingReminders(bot);
+        } catch (e) {
+            console.error('⚠️ Lỗi gửi nhắc nhở đặt lịch:', e.message);
+        }
+    }, 60000);
     
     // Fetch and save bot username dynamically
     bot.telegram.getMe().then((me) => {

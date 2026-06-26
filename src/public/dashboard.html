@@ -487,6 +487,7 @@
             <li class="menu-item active" id="menu-overview"><a onclick="switchPanel('overview')">📊 Tổng quan</a></li>
             <li class="menu-item" id="menu-appointments"><a onclick="switchPanel('appointments')">📅 Lịch hẹn khám</a></li>
             <li class="menu-item admin-only-section" id="menu-services"><a onclick="switchPanel('services')">🩺 Dịch vụ & Gói khám</a></li>
+            <li class="menu-item admin-only-section" id="menu-campaigns"><a onclick="switchPanel('campaigns')">📢 Quản lý Chiến dịch</a></li>
             <li class="menu-item admin-only-section" id="menu-staff"><a onclick="switchPanel('staff')">👥 Nhân viên phòng khám</a></li>
         </ul>
         <div class="sidebar-footer">
@@ -547,7 +548,10 @@
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">10 Lịch hẹn đăng ký mới nhất</h3>
-                    <button class="btn btn-primary" onclick="loadData()">🔄 Làm mới</button>
+                    <div class="action-flex">
+                        <button class="btn btn-primary" onclick="loadData()">🔄 Làm mới</button>
+                        <button class="btn btn-success admin-only-section" onclick="exportTransactions()">💰 Xuất BC Tài chính</button>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table>
@@ -559,11 +563,12 @@
                                 <th>Gói dịch vụ</th>
                                 <th>Ngày hẹn</th>
                                 <th>Giờ hẹn</th>
+                                <th>Thời gian đặt</th>
                                 <th>Trạng thái</th>
                             </tr>
                         </thead>
                         <tbody id="recent-appointments-table">
-                            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Đang tải dữ liệu lịch hẹn...</td></tr>
+                            <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Đang tải dữ liệu lịch hẹn...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -577,6 +582,7 @@
                     <h3 class="card-title">Danh sách chi tiết Lịch hẹn khám</h3>
                     <div class="action-flex">
                         <button class="btn btn-primary" onclick="loadAppointments()">🔄 Tải lại</button>
+                        <button class="btn btn-success" onclick="exportAppointments()">📥 Xuất Excel</button>
                     </div>
                 </div>
                 
@@ -604,12 +610,13 @@
                                 <th>Ngày khám</th>
                                 <th>Giờ khám</th>
                                 <th>Tiền cọc</th>
+                                <th>Thời gian đặt</th>
                                 <th>Trạng thái</th>
                                 <th>Hành động</th>
                             </tr>
                         </thead>
                         <tbody id="appointments-list-table">
-                            <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Đang truy vấn danh sách lịch hẹn...</td></tr>
+                            <tr><td colspan="10" style="text-align: center; color: var(--text-muted);">Đang truy vấn danh sách lịch hẹn...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -664,6 +671,43 @@
                         </thead>
                         <tbody id="staff-list-table">
                             <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Đang tải danh sách nhân sự...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE 5: CAMPAIGNS -->
+        <div id="panel-campaigns" class="panel-page">
+            <!-- Campaign KPIs -->
+            <div class="kpi-grid" id="campaign-kpis-grid">
+                <!-- Dynamically populated -->
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Danh sách Chiến dịch & Ngân sách</h3>
+                    <div class="action-flex">
+                        <button class="btn btn-primary" onclick="loadCampaigns()">🔄 Tải lại</button>
+                        <button class="btn btn-success" onclick="exportCampaigns()">📥 Xuất Excel</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tên chiến dịch</th>
+                                <th>Loại chiến dịch</th>
+                                <th>Mức ưu đãi</th>
+                                <th>Ngân sách giới hạn</th>
+                                <th>Đã giải ngân</th>
+                                <th>Tiến trình</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody id="campaigns-list-table">
+                            <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Đang tải danh sách chiến dịch...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -823,13 +867,15 @@
                 overview: 'Hệ thống tổng quan',
                 appointments: 'Lịch trình khám bệnh',
                 services: 'Danh mục dịch vụ y tế',
-                staff: 'Nhân viên phòng khám'
+                staff: 'Nhân viên phòng khám',
+                campaigns: 'Quản lý Chiến dịch & Ngân sách'
             };
             const subtitleMap = {
                 overview: 'Thống kê hoạt động của phòng khám hôm nay',
                 appointments: 'Theo dõi, hủy và xác nhận check-in cho bệnh nhân',
                 services: 'Quản trị các gói chăm sóc răng miệng & tiểu phẫu',
-                staff: 'Tạo tài khoản và phân quyền nhân sự phòng khám'
+                staff: 'Tạo tài khoản và phân quyền nhân sự phòng khám',
+                campaigns: 'Theo dõi ngân sách khuyến mãi, hiệu quả marketing (CAC, Conversion)'
             };
             
             document.getElementById('page-title').textContent = titleMap[panelName];
@@ -839,6 +885,84 @@
             if (panelName === 'appointments') loadAppointments();
             if (panelName === 'services') loadServices();
             if (panelName === 'staff') loadStaff();
+            if (panelName === 'campaigns') loadCampaigns();
+        }
+
+        async function loadCampaigns() {
+            try {
+                const response = await fetch('/admin/api/campaigns');
+                const res = await response.json();
+                
+                if (response.ok && res.success) {
+                    // Render Campaign KPIs
+                    const kpisGrid = document.getElementById('campaign-kpis-grid');
+                    kpisGrid.innerHTML = `
+                        <div class="kpi-card">
+                            <div class="kpi-info">
+                                <h3>Chi phí thu hút KH (CAC)</h3>
+                                <p>${formatMoney(res.stats.cac)}</p>
+                            </div>
+                            <span class="kpi-icon">🎯</span>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-info">
+                                <h3>Tỷ lệ chuyển đổi nhắc hẹn</h3>
+                                <p>${res.stats.reminderConversionRate}%</p>
+                            </div>
+                            <span class="kpi-icon">📈</span>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-info">
+                                <h3>Tổng số lượt nhắc nhở</h3>
+                                <p>${res.stats.totalReminders}</p>
+                            </div>
+                            <span class="kpi-icon">💬</span>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-info">
+                                <h3>Số lịch hoàn tất từ nhắc nhở</h3>
+                                <p>${res.stats.convertedReminders}</p>
+                            </div>
+                            <span class="kpi-icon">✅</span>
+                        </div>
+                    `;
+
+                    // Render Campaign list table
+                    const tbody = document.getElementById('campaigns-list-table');
+                    tbody.innerHTML = '';
+
+                    res.campaigns.forEach(c => {
+                        const percent = c.budget_limit > 0 ? Math.min(100, Math.round((c.budget_spent / c.budget_limit) * 100)) : 0;
+                        const statusBadge = c.is_active ? 
+                            '<span class="badge badge-completed">Hoạt động</span>' : 
+                            '<span class="badge badge-cancelled">Dừng</span>';
+                        
+                        const typeText = c.type === 'attract' ? 'Thu hút khách mới' : 'Gìn giữ khách cũ';
+                        
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${c.id}</td>
+                                <td><b>${c.name}</b></td>
+                                <td><span class="badge badge-confirmed">${typeText}</span></td>
+                                <td>+${formatMoney(c.value)} vào ví</td>
+                                <td>${formatMoney(c.budget_limit)}</td>
+                                <td><b>${formatMoney(c.budget_spent)}</b></td>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden; height: 8px; flex-grow: 1; border: 1px solid rgba(255,255,255,0.05); min-width: 100px;">
+                                            <div style="background: linear-gradient(90deg, #3b82f6 0%, #10b981 100%); width: ${percent}%; height: 100%; border-radius: 10px;"></div>
+                                        </div>
+                                        <span style="font-size: 0.8rem; color: var(--text-muted); font-weight:600;">${percent}%</span>
+                                    </div>
+                                </td>
+                                <td>${statusBadge}</td>
+                            </tr>
+                        `;
+                    });
+                }
+            } catch (err) {
+                console.error('Error fetching campaigns:', err);
+            }
         }
 
         // Startup actions
@@ -884,7 +1008,7 @@
                 tbody.innerHTML = '';
 
                 if (res.recentAppointments.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Không có lịch hẹn nào mới.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Không có lịch hẹn nào mới.</td></tr>';
                     return;
                 }
 
@@ -898,6 +1022,7 @@
                             <td>${appt.package_name}</td>
                             <td><b>${appt.booking_date}</b></td>
                             <td><b>${appt.booking_time}</b></td>
+                            <td>${formatDateTime(appt.created_at)}</td>
                             <td>${statusBadge}</td>
                         </tr>
                     `;
@@ -927,7 +1052,7 @@
             tbody.innerHTML = '';
 
             if (list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Không có lịch hẹn nào khớp bộ lọc.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted);">Không có lịch hẹn nào khớp bộ lọc.</td></tr>';
                 return;
             }
 
@@ -953,6 +1078,7 @@
                         <td>${appt.booking_date}</td>
                         <td>${appt.booking_time}</td>
                         <td>${formatMoney(appt.deposit_amount)}</td>
+                        <td>${formatDateTime(appt.created_at)}</td>
                         <td>${statusBadge}</td>
                         <td>
                             <div class="action-flex">
@@ -1295,6 +1421,18 @@
             } catch (err) {
                 alert('Không thể thực hiện.');
             }
+        }
+
+        function exportAppointments() {
+            window.open('/admin/api/reports/appointments/export', '_blank');
+        }
+
+        function exportTransactions() {
+            window.open('/admin/api/reports/transactions/export', '_blank');
+        }
+
+        function exportCampaigns() {
+            window.open('/admin/api/reports/campaigns/export', '_blank');
         }
 
         // Badge translation helper

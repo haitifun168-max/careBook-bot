@@ -259,6 +259,9 @@ test.describe('WebhookService and Express API Tests', () => {
         // Slot should be full now
         assert.strictEqual(await appointmentService.isSlotAvailable(dateStr, timeLabel, maxCapacity), false);
 
+        const userBefore = await userService.get(testUser.id);
+        const balanceBefore = userBefore ? userBefore.balance : 0;
+
         // Webhook receives payment for cancelled appointment A
         const res = await fetch(`${baseUrl}/webhook/sepay`, {
             method: 'POST',
@@ -283,7 +286,7 @@ test.describe('WebhookService and Express API Tests', () => {
 
         // User wallet should be refunded
         const user = await userService.get(testUser.id);
-        assert.strictEqual(user.balance, product.deposit_amount);
+        assert.strictEqual(user.balance, balanceBefore + product.deposit_amount);
 
         // Notification must contain wallet refund info
         const userMsg = sentTelegramMessages.find(m => String(m.chatId) === String(testUser.id));

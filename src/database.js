@@ -122,6 +122,38 @@ const initDb = async () => {
       );
     `);
 
+    // Alter appointments table to add reminder_sent if not exists
+    await pool.query(`
+      ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_sent INTEGER DEFAULT 0;
+    `);
+
+    // Create marketing_campaigns table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS marketing_campaigns (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        reward_type VARCHAR(50) NOT NULL,
+        value INTEGER NOT NULL,
+        budget_limit INTEGER NOT NULL,
+        budget_spent INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Create campaign_usages table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS campaign_usages (
+        id SERIAL PRIMARY KEY,
+        campaign_id INTEGER REFERENCES marketing_campaigns(id) ON DELETE CASCADE,
+        user_id VARCHAR(255) REFERENCES users(telegram_id) ON DELETE CASCADE,
+        appointment_id INTEGER REFERENCES appointments(id) ON DELETE CASCADE,
+        amount_used INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Seed categories
     const catCountRes = await pool.query('SELECT COUNT(*) as c FROM categories');
     if (parseInt(catCountRes.rows[0].c) === 0) {
@@ -171,6 +203,20 @@ const initDb = async () => {
       await pool.query(
         "INSERT INTO dashboard_users (username, password_hash, role) VALUES ($1, $2, $3)",
         ['admin', 'c1a2b3d4e5f67890:0420ac8de5c476a06648594bc97f832d37900f79f6cf5ff4790c7a95965018e05ba521ff202af4685c3d1cc32364c2e7452d6d2aa310f19e4ba834d9d934456f', 'admin']
+      );
+    }
+
+    // Seed default marketing campaigns
+    const campaignCountRes = await pool.query('SELECT COUNT(*) as c FROM marketing_campaigns');
+    if (parseInt(campaignCountRes.rows[0].c) === 0) {
+      console.log('📢 Seeding default marketing campaigns...');
+      await pool.query(
+        "INSERT INTO marketing_campaigns (name, type, reward_type, value, budget_limit) VALUES ($1, $2, $3, $4, $5)",
+        ['Chiến dịch Thu hút khách mới', 'attract', 'cashback', 50000, 10000000]
+      );
+      await pool.query(
+        "INSERT INTO marketing_campaigns (name, type, reward_type, value, budget_limit) VALUES ($1, $2, $3, $4, $5)",
+        ['Chiến dịch Tri ân khách cũ', 'retain', 'cashback', 30000, 5000000]
       );
     }
 

@@ -39,6 +39,17 @@ function parseCookies(cookieHeader) {
     return list;
 }
 
+function extractPhoneFromText(inputText) {
+    if (!inputText) return null;
+    const cleanText = String(inputText).trim();
+    const zaloUrlRegex = /(?:https?:\/\/)?(?:www\.)?zalo\.me\/((?:0|84)?\d{9,10})\b/i;
+    const match = cleanText.match(zaloUrlRegex);
+    if (match) {
+        return match[1];
+    }
+    return cleanText;
+}
+
 // PBKDF2 Cryptography helpers
 function hashPassword(password) {
     const salt = crypto.randomBytes(16).toString('hex');
@@ -74,7 +85,7 @@ function startWebhookServer(bot) {
                 if (req.xhr || req.path.includes('/api/')) {
                     return res.status(401).json({ error: 'Unauthorized. Phiên làm việc hết hạn.' });
                 }
-                return res.redirect('/admin/login');
+                return res.redirect(`/admin/login?redirect=${encodeURIComponent(req.originalUrl)}`);
             }
 
             try {
@@ -85,7 +96,7 @@ function startWebhookServer(bot) {
                     if (req.xhr || req.path.includes('/api/')) {
                         return res.status(401).json({ error: 'Unauthorized. Phiên làm việc hết hạn.' });
                     }
-                    return res.redirect('/admin/login');
+                    return res.redirect(`/admin/login?redirect=${encodeURIComponent(req.originalUrl)}`);
                 }
 
                 if (!allowedRoles.includes(userSession.role)) {
@@ -310,25 +321,48 @@ function startWebhookServer(bot) {
                 if (confirmResult.success) {
                     console.log(`✅ Webhook đã thanh toán cọc & xác nhận lịch hẹn #${appointment.id}`);
 
-                    // Notify customer via Telegram / Zalo
+                    // Generate QR Code Check-in link
+                    const baseUrl = config.PUBLIC_URL || ('http://' + req.headers.host);
+                    const checkinLink = `${baseUrl.replace(/\/$/, '')}/admin/checkin?code=${appointment.payment_code}`;
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(checkinLink)}`;
+
+                    // Notify customer via Telegram / Zalo with QR Code check-in
                     try {
+                        let successText = messages.bookingSuccess(confirmResult.appointment, appointment.package_name);
+                        if (confirmResult.promotionApplied) {
+                            const promo = confirmResult.promotionApplied;
+                            const formattedValue = new Intl.NumberFormat('vi-VN').format(promo.value) + 'đ';
+                            successText += `\n\n🎁 <b>ƯU ĐÃI ĐÃ ÁP DỤNG:</b>\n` +
+                                           `Bạn được hoàn tiền <b>+${formattedValue}</b> vào ví tích điểm nhờ chiến dịch <i>"${promo.campaignName}"</i>!`;
+                        }
+
                         const isZalo = String(appointment.user_id).length >= 12;
                         if (isZalo) {
                             const zaloBotService = require('./zaloBotService');
                             await zaloBotService.sendMessage(
                                 String(appointment.user_id),
-                                messages.bookingSuccess(confirmResult.appointment, appointment.package_name),
+                                successText,
                                 'html'
+                            );
+                            await zaloBotService.sendPhoto(
+                                String(appointment.user_id),
+                                qrCodeUrl,
+                                'Vui lòng đưa mã QR này cho lễ tân để check-in khi đến phòng khám'
                             );
                         } else {
                             await bot.telegram.sendMessage(
                                 appointment.user_id,
-                                messages.bookingSuccess(confirmResult.appointment, appointment.package_name),
+                                successText,
                                 { parse_mode: 'HTML' }
+                            );
+                            await bot.telegram.sendPhoto(
+                                appointment.user_id,
+                                qrCodeUrl,
+                                { caption: 'Vui lòng đưa mã QR này cho lễ tân để check-in khi đến phòng khám' }
                             );
                         }
                     } catch (err) {
-                        console.error('Failed to notify customer about confirmed booking:', err.message);
+                        console.error('Failed to notify customer about confirmed booking with QR checkin:', err.message);
                     }
 
                     // Notify Admin
@@ -683,6 +717,54 @@ function startWebhookServer(bot) {
         }
     });
 
+    // 1b. Get marketing campaigns statistics & listing
+    app.get('/admin/api/campaigns', checkRole(['admin']), async (req, res) => {
+        try {
+            const campaignsRes = await db.query('SELECT * FROM marketing_campaigns ORDER BY id');
+            
+            // Calculate reminder conversion rate
+            const totalRemindersRes = await db.query('SELECT COUNT(*) as c FROM appointments WHERE reminder_sent = 1');
+            const convertedRemindersRes = await db.query("SELECT COUNT(*) as c FROM appointments WHERE reminder_sent = 1 AND status IN ('confirmed', 'completed')");
+            
+            const totalReminders = parseInt(totalRemindersRes.rows[0].c) || 0;
+            const convertedReminders = parseInt(convertedRemindersRes.rows[0].c) || 0;
+            const reminderConversionRate = totalReminders > 0 ? parseFloat(((convertedReminders / totalReminders) * 100).toFixed(1)) : 0;
+
+            // Calculate CAC (Customer Acquisition Cost) for 'attract' campaign
+            const attractCampaign = campaignsRes.rows.find(c => c.type === 'attract');
+            let cac = 0;
+            if (attractCampaign && attractCampaign.budget_spent > 0) {
+                const uniqueUsersRes = await db.query('SELECT COUNT(DISTINCT user_id) as c FROM campaign_usages WHERE campaign_id = $1', [attractCampaign.id]);
+                const uniqueUsers = parseInt(uniqueUsersRes.rows[0].c) || 0;
+                cac = uniqueUsers > 0 ? Math.round(attractCampaign.budget_spent / uniqueUsers) : 0;
+            }
+
+            // Calculate total usages count per campaign
+            const usagesCountRes = await db.query('SELECT campaign_id, COUNT(*) as c FROM campaign_usages GROUP BY campaign_id');
+            const usagesMap = {};
+            usagesCountRes.rows.forEach(r => {
+                usagesMap[r.campaign_id] = parseInt(r.c);
+            });
+
+            res.json({
+                success: true,
+                campaigns: campaignsRes.rows.map(c => ({
+                    ...c,
+                    usage_count: usagesMap[c.id] || 0
+                })),
+                stats: {
+                    totalReminders,
+                    convertedReminders,
+                    reminderConversionRate,
+                    cac
+                }
+            });
+        } catch (err) {
+            console.error('API Campaigns Error:', err.message);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    });
+
     // 2. Read packages / products
     app.get('/admin/api/products', checkRole(['admin', 'receptionist', 'doctor']), async (req, res) => {
         try {
@@ -788,6 +870,231 @@ function startWebhookServer(bot) {
         }
     });
 
+    // Helper to send thank you message
+    async function sendThankYouNotification(bot, appointment) {
+        if (!appointment) return;
+        const isZalo = String(appointment.user_id).length >= 12;
+        const thankYouText = `💖 <b>CẢM ƠN BẠN ĐÃ SỬ DỤNG DỊCH VỤ!</b>\n\n` +
+            `Bác sĩ đã hoàn thành buổi khám cho lịch hẹn <b>#${appointment.id}</b> của bạn.\n` +
+            `🩺 Dịch vụ: <b>${appointment.package_name}</b>\n` +
+            `👤 Bệnh nhân: <b>${appointment.patient_name}</b>\n` +
+            `📅 Ngày khám: <b>${appointment.booking_date}</b>\n\n` +
+            `CareBook Clinic kính chúc bạn luôn mạnh khỏe và nhiều niềm vui! Hẹn gặp lại bạn ở những lần khám sau.`;
+
+        try {
+            if (isZalo) {
+                const zaloBotService = require('./zaloBotService');
+                await zaloBotService.sendMessage(String(appointment.user_id), thankYouText, 'html');
+            } else {
+                await bot.telegram.sendMessage(appointment.user_id, thankYouText, { parse_mode: 'HTML' });
+            }
+            console.log(`✉️ Đã gửi tin nhắn cảm ơn cho bệnh nhân ${appointment.patient_name} (ID: ${appointment.user_id})`);
+        } catch (err) {
+            console.error('Lỗi khi gửi tin nhắn cảm ơn cho bệnh nhân:', err.message);
+        }
+    }
+
+    function renderCheckinPage(status, title, message, appointment = null) {
+        let icon = 'ℹ️';
+        let iconClass = 'warning-icon';
+        if (status === 'success') {
+            icon = '✅';
+            iconClass = 'success-icon';
+        } else if (status === 'error') {
+            icon = '❌';
+            iconClass = 'danger-icon';
+        }
+
+        let detailsHtml = '';
+        if (appointment) {
+            detailsHtml = `
+                <div class="details-card">
+                    <div class="detail-row">
+                        <span class="detail-label">Mã lịch hẹn</span>
+                        <span class="detail-value">#${appointment.id}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Bệnh nhân</span>
+                        <span class="detail-value">${appointment.patient_name}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Số điện thoại</span>
+                        <span class="detail-value">${appointment.patient_phone}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Dịch vụ</span>
+                        <span class="detail-value">${appointment.package_emoji || '🩺'} ${appointment.package_name}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Thời gian</span>
+                        <span class="detail-value">${appointment.booking_time} ngày ${appointment.booking_date}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Tổng chi phí</span>
+                        <span class="detail-value">${new Intl.NumberFormat('vi-VN').format(appointment.total_price)}đ</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xác nhận Check-in — CareBook Clinic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            --glass-bg: rgba(30, 41, 59, 0.45);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-main);
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 40px 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        .status-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+        .success-icon { color: var(--accent); }
+        .warning-icon { color: var(--warning); }
+        .danger-icon { color: var(--danger); }
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .subtitle {
+            font-size: 1rem;
+            color: var(--text-muted);
+            margin-bottom: 30px;
+        }
+        .details-card {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: left;
+            margin-bottom: 30px;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+        .detail-row:last-child {
+            margin-bottom: 0;
+            padding-top: 12px;
+            border-top: 1px dashed rgba(255, 255, 255, 0.1);
+        }
+        .detail-label {
+            color: var(--text-muted);
+        }
+        .detail-value {
+            font-weight: 500;
+            color: var(--text-main);
+        }
+        .btn-dashboard {
+            display: inline-block;
+            width: 100%;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-dashboard:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="status-icon \${iconClass}">\${icon}</span>
+        <h1>\${title}</h1>
+        <p class="subtitle">\${message}</p>
+        \${detailsHtml}
+        <a href="/admin/dashboard" class="btn-dashboard">Quay lại Dashboard</a>
+    </div>
+</body>
+</html>
+        `;
+    }
+
+    // QR Check-in Endpoint
+    app.get('/admin/checkin', checkRole(['admin', 'receptionist']), async (req, res) => {
+        const { code } = req.query;
+        if (!code) {
+            return res.send(renderCheckinPage('error', 'Lỗi Check-in', 'Không tìm thấy mã check-in hợp lệ. Vui lòng quét lại.'));
+        }
+
+        try {
+            const appointment = await appointmentService.getByPaymentCode(code);
+            if (!appointment) {
+                return res.send(renderCheckinPage('error', 'Lỗi Check-in', 'Không tìm thấy lịch hẹn khớp với mã check-in này.'));
+            }
+
+            if (appointment.status === 'pending') {
+                return res.send(renderCheckinPage('warning', 'Chưa thanh toán cọc', 'Lịch hẹn này chưa được xác nhận thanh toán cọc. Lễ tân cần xác nhận cọc trước khi check-in.', appointment));
+            }
+
+            if (appointment.status === 'completed') {
+                const completedTime = appointment.completed_at ? new Date(appointment.completed_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ngày ' + new Date(appointment.completed_at).toLocaleDateString('vi-VN') : '';
+                return res.send(renderCheckinPage('success', 'Đã Check-in', `Lịch hẹn này đã được check-in hoàn tất từ trước${completedTime ? ' vào lúc ' + completedTime : ''}.`, appointment));
+            }
+
+            if (appointment.status === 'cancelled') {
+                return res.send(renderCheckinPage('error', 'Lịch hẹn đã hủy', 'Lịch hẹn này đã bị hủy bỏ trên hệ thống.', appointment));
+            }
+
+            // Status is 'confirmed', do check-in
+            const result = await appointmentService.checkIn(appointment.id);
+            if (result.success) {
+                await sendThankYouNotification(bot, result.appointment);
+                return res.send(renderCheckinPage('success', 'Check-in Thành Công', 'Lịch hẹn đã được check-in thành công. Hệ thống đã gửi lời cảm ơn tới bệnh nhân.', result.appointment));
+            } else {
+                return res.send(renderCheckinPage('error', 'Lỗi Check-in', `Không thể thực hiện check-in: ${result.error}`, appointment));
+            }
+        } catch (err) {
+            console.error('Error in QR checkin:', err);
+            return res.status(500).send(renderCheckinPage('error', 'Lỗi hệ thống', 'Đã xảy ra lỗi trên hệ thống khi xử lý check-in.'));
+        }
+    });
+
     // 7. Check-in client
     app.post('/admin/api/appointments/checkin', checkRole(['admin', 'receptionist']), async (req, res) => {
         const { id } = req.body;
@@ -795,6 +1102,7 @@ function startWebhookServer(bot) {
 
         const result = await appointmentService.checkIn(parseInt(id));
         if (result.success) {
+            await sendThankYouNotification(bot, result.appointment);
             res.json({ success: true });
         } else {
             res.status(400).json({ error: result.error });
@@ -911,6 +1219,180 @@ function startWebhookServer(bot) {
         }
     });
 
+    // CSV helper utility
+    function convertToCsv(headers, rows) {
+        const csvRows = [headers.join(',')];
+        for (const row of rows) {
+            const values = row.map(val => {
+                if (val === null || val === undefined) return '';
+                let str = String(val);
+                if (val instanceof Date) {
+                    str = val.toLocaleString('vi-VN');
+                }
+                str = str.replace(/"/g, '""');
+                if (str.includes(',') || str.includes('\n') || str.includes('\r') || str.includes('"')) {
+                    str = `"${str}"`;
+                }
+                return str;
+            });
+            csvRows.push(values.join(','));
+        }
+        return '\uFEFF' + csvRows.join('\r\n');
+    }
+
+    // Export appointments report
+    app.get('/admin/api/reports/appointments/export', checkRole(['admin', 'receptionist']), async (req, res) => {
+        try {
+            const result = await db.query(`
+                SELECT a.id, a.patient_name, a.patient_phone, c.name as category_name, p.name as package_name, 
+                       a.booking_date, a.booking_time, a.total_price, a.deposit_amount, a.created_at, a.status
+                FROM appointments a
+                JOIN products p ON a.package_id = p.id
+                JOIN categories c ON p.category_id = c.id
+                ORDER BY a.created_at DESC
+            `);
+
+            const headers = [
+                'Mã lịch hẹn', 'Tên bệnh nhân', 'Số điện thoại', 'Chuyên khoa', 'Gói khám',
+                'Ngày khám', 'Giờ khám', 'Tổng chi phí (đ)', 'Tiền cọc (đ)', 'Thời gian đặt', 'Trạng thái'
+            ];
+
+            const statusMap = {
+                pending: 'Chờ thanh toán cọc',
+                confirmed: 'Đã cọc / Đã xác nhận',
+                completed: 'Đã khám xong',
+                cancelled: 'Đã hủy lịch'
+            };
+
+            const rows = result.rows.map(a => [
+                `#${a.id}`,
+                a.patient_name,
+                `'${a.patient_phone}`,
+                a.category_name,
+                a.package_name,
+                a.booking_date,
+                a.booking_time,
+                a.total_price,
+                a.deposit_amount,
+                a.created_at,
+                statusMap[a.status] || a.status
+            ]);
+
+            const csvContent = convertToCsv(headers, rows);
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', 'attachment; filename=bao_cao_lich_kham.csv');
+            return res.send(csvContent);
+        } catch (err) {
+            console.error('Export appointments error:', err);
+            return res.status(500).send('Lỗi khi xuất báo cáo: ' + err.message);
+        }
+    });
+
+    // Export financial transactions report
+    app.get('/admin/api/reports/transactions/export', checkRole(['admin']), async (req, res) => {
+        try {
+            const result = await db.query(`
+                SELECT 
+                    'Nạp ví tích điểm' as type,
+                    d.user_id::text as user_id,
+                    u.full_name as user_name,
+                    d.amount as amount,
+                    d.payment_code as payment_code,
+                    d.status as status,
+                    d.created_at as created_at
+                FROM deposits d
+                LEFT JOIN users u ON d.user_id = u.telegram_id
+                UNION ALL
+                SELECT 
+                    'Đặt cọc lịch khám' as type,
+                    a.user_id::text as user_id,
+                    a.patient_name as user_name,
+                    a.deposit_amount as amount,
+                    a.payment_code as payment_code,
+                    a.status as status,
+                    a.created_at as created_at
+                FROM appointments a
+                ORDER BY created_at DESC
+            `);
+
+            const headers = [
+                'Loại giao dịch', 'ID Khách hàng', 'Tên Khách hàng', 'Số tiền (đ)', 'Mã thanh toán', 'Trạng thái', 'Thời gian tạo'
+            ];
+
+            const statusMap = {
+                pending: 'Chờ xử lý',
+                completed: 'Hoàn tất',
+                confirmed: 'Hoàn tất (Đã cọc)',
+                cancelled: 'Đã hủy'
+            };
+
+            const rows = result.rows.map(t => [
+                t.type,
+                `'${t.user_id}`,
+                t.user_name || 'Khách vãng lai',
+                t.amount,
+                t.payment_code,
+                statusMap[t.status] || t.status,
+                t.created_at
+            ]);
+
+            const csvContent = convertToCsv(headers, rows);
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', 'attachment; filename=bao_cao_doanh_thu.csv');
+            return res.send(csvContent);
+        } catch (err) {
+            console.error('Export transactions error:', err);
+            return res.status(500).send('Lỗi khi xuất báo cáo tài chính: ' + err.message);
+        }
+    });
+
+    // Export marketing campaigns ROI report
+    app.get('/admin/api/reports/campaigns/export', checkRole(['admin']), async (req, res) => {
+        try {
+            const result = await db.query(`
+                SELECT cu.id, mc.name as campaign_name, mc.type as campaign_type, cu.amount_used, 
+                       cu.user_id, u.full_name, cu.appointment_id, p.name as package_name, 
+                       a.booking_date, cu.created_at
+                FROM campaign_usages cu
+                JOIN marketing_campaigns mc ON cu.campaign_id = mc.id
+                JOIN appointments a ON cu.appointment_id = a.id
+                JOIN products p ON a.package_id = p.id
+                LEFT JOIN users u ON cu.user_id = u.telegram_id
+                ORDER BY cu.created_at DESC
+            `);
+
+            const headers = [
+                'Mã sử dụng', 'Chiến dịch', 'Loại chiến dịch', 'Mức ưu đãi hoàn tiền (đ)', 'ID Khách hàng', 'Tên Khách hàng', 'Mã lịch hẹn', 'Dịch vụ đã dùng', 'Ngày hẹn khám', 'Thời gian nhận'
+            ];
+
+            const typeMap = {
+                attract: 'Thu hút khách mới',
+                retain: 'Gìn giữ khách cũ'
+            };
+
+            const rows = result.rows.map(cu => [
+                `#${cu.id}`,
+                cu.campaign_name,
+                typeMap[cu.campaign_type] || cu.campaign_type,
+                cu.amount_used,
+                `'${cu.user_id}`,
+                cu.full_name || 'Khách hàng',
+                `#${cu.appointment_id}`,
+                cu.package_name,
+                cu.booking_date,
+                cu.created_at
+            ]);
+
+            const csvContent = convertToCsv(headers, rows);
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', 'attachment; filename=bao_cao_marketing.csv');
+            return res.send(csvContent);
+        } catch (err) {
+            console.error('Export marketing campaigns error:', err);
+            return res.status(500).send('Lỗi khi xuất báo cáo marketing: ' + err.message);
+        }
+    });
+
     // ═══════════════════════════════════════
     // ZALO CHATBOT WEBHOOK
     // ═══════════════════════════════════════
@@ -942,13 +1424,18 @@ function startWebhookServer(bot) {
             let text = null;
             if (update.message) {
                 if (update.message.text) {
-                    text = update.message.text;
+                    text = extractPhoneFromText(update.message.text);
                 } else if (update.message.contact && update.message.contact.phone_number) {
                     text = update.message.contact.phone_number;
                 } else if (update.message.attachments && Array.isArray(update.message.attachments)) {
                     const card = update.message.attachments.find(a => a.type === 'business_card');
                     if (card && card.payload && card.payload.phone) {
                         text = card.payload.phone;
+                    } else {
+                        const linkAttachment = update.message.attachments.find(a => a.type === 'link');
+                        if (linkAttachment && linkAttachment.payload && linkAttachment.payload.url) {
+                            text = extractPhoneFromText(linkAttachment.payload.url);
+                        }
                     }
                 }
             }
@@ -960,6 +1447,10 @@ function startWebhookServer(bot) {
                 }
             }
 
+            if (!text && update.event_name === 'user_submit_info' && update.info && update.info.phone) {
+                text = update.info.phone;
+            }
+
             const fromUser = (update.message && update.message.from) || { id: chatId };
             const senderName = fromUser ? `${fromUser.first_name || ''} ${fromUser.last_name || ''}`.trim() : 'N/A';
 
@@ -967,7 +1458,18 @@ function startWebhookServer(bot) {
 
             if (text) {
                 const zaloBookingHandler = require('../handlers/zaloBookingHandler');
-                await zaloBookingHandler.handleZaloMessage(chatId, text, fromUser);
+                const contactInfo = {};
+                if (update.event_name === 'user_submit_info' && update.info) {
+                    contactInfo.name = update.info.name;
+                    contactInfo.phone = update.info.phone;
+                } else if (update.message && update.message.attachments) {
+                    const card = update.message.attachments.find(a => a.type === 'business_card');
+                    if (card && card.payload) {
+                        contactInfo.name = card.payload.display_name;
+                        contactInfo.phone = card.payload.phone;
+                    }
+                }
+                await zaloBookingHandler.handleZaloMessage(chatId, text, fromUser, contactInfo);
             }
         } catch (err) {
             console.error('❌ Lỗi xử lý Webhook Zalo:', err.message);

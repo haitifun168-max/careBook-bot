@@ -290,7 +290,8 @@
                 const result = await response.json();
 
                 if (response.ok && result.success) {
-                    window.location.href = '/admin/dashboard';
+                    const redirectUrl = urlParams.get('redirect') || '/admin/dashboard';
+                    window.location.href = redirectUrl;
                 } else {
                     errorBox.textContent = result.error || 'Đăng nhập thất bại. Vui lòng kiểm tra lại tài khoản.';
                     errorBox.style.display = 'block';

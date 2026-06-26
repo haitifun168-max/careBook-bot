@@ -20,7 +20,7 @@ function formatPrice(amount) {
 /**
  * Main Message Router for Zalo Bot
  */
-async function handleZaloMessage(chatId, text, fromUser) {
+async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
     const numericUserId = chatId;
     if (numericUserId && fromUser) {
         // Register user if not exists
@@ -186,6 +186,101 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         }
 
+        if (normalizedText === '8' || normalizedText === 'lich su' || normalizedText === 'lịch sử' || normalizedText === 'lichsu') {
+            try {
+                const transRes = await db.query(`
+                    SELECT 
+                        'deposit' as type,
+                        amount as val,
+                        payment_code,
+                        status,
+                        created_at
+                    FROM deposits
+                    WHERE user_id = $1
+                    UNION ALL
+                    SELECT 
+                        'appointment' as type,
+                        deposit_amount as val,
+                        payment_code,
+                        status,
+                        created_at
+                    FROM appointments
+                    WHERE user_id = $1
+                    ORDER BY created_at DESC
+                    LIMIT 10
+                `, [String(numericUserId)]);
+
+                let text = '📜 <b>LỊCH SỬ GIAO DỊCH GẦN ĐÂY (ZALO)</b>\n\n';
+                if (transRes.rows.length === 0) {
+                    text += '<i>Bạn chưa có giao dịch nào trên hệ thống.</i>';
+                } else {
+                    transRes.rows.forEach(t => {
+                        const dateStr = new Date(t.created_at).toLocaleDateString('vi-VN');
+                        const formattedAmount = formatPrice(t.val);
+                        const typeText = t.type === 'deposit' ? '➕ Nạp ví' : '➖ Trực tiếp (Cọc)';
+                        const statusText = t.status === 'completed' || t.status === 'confirmed' ? '✅ Thành công' : (t.status === 'pending' ? '⏳ Chờ xử lý' : '❌ Đã hủy');
+                        text += `• <b>${dateStr}</b> | ${typeText}: <b>${formattedAmount}</b>\n` +
+                                `  ├ Mã: <code>${t.payment_code}</code>\n` +
+                                `  └ Trạng thái: ${statusText}\n\n`;
+                    });
+                }
+                await zaloBotService.sendMessage(chatId, text, 'html');
+            } catch (err) {
+                console.error('Error fetching Zalo transactions:', err.message);
+                await zaloBotService.sendMessage(chatId, '❌ Lỗi hệ thống khi lấy lịch sử giao dịch.');
+            }
+            return;
+        }
+
+        if (normalizedText === '9' || normalizedText === 'uu dai' || normalizedText === 'ưu đãi' || normalizedText === 'uudai') {
+            try {
+                const activeCampaignsRes = await db.query(`
+                    SELECT name, type, value 
+                    FROM marketing_campaigns 
+                    WHERE is_active = 1 AND budget_spent + value <= budget_limit
+                `);
+
+                const myUsagesRes = await db.query(`
+                    SELECT mc.name as campaign_name, cu.amount_used, cu.created_at
+                    FROM campaign_usages cu
+                    JOIN marketing_campaigns mc ON cu.campaign_id = mc.id
+                    WHERE cu.user_id = $1
+                    ORDER BY cu.created_at DESC
+                `, [String(numericUserId)]);
+
+                let text = '🎁 <b>ƯU ĐÃI CỦA BẠN (ZALO)</b>\n\n';
+
+                text += '📢 <b>Chiến dịch ưu đãi hiện tại:</b>\n';
+                if (activeCampaignsRes.rows.length === 0) {
+                    text += '• <i>Hiện tại chưa có chiến dịch ưu đãi mới.</i>\n\n';
+                } else {
+                    activeCampaignsRes.rows.forEach(c => {
+                        const valText = formatPrice(c.value);
+                        const desc = c.type === 'attract' ? 
+                            `Tặng <b>+${valText}</b> vào ví tích điểm cho khách mới đặt lịch khám lần đầu.` :
+                            `Hoàn tiền <b>+${valText}</b> vào ví tích điểm cho khách cũ khi tái khám cọc thành công.`;
+                        text += `• <b>${c.name}</b>\n  └ ${desc}\n\n`;
+                    });
+                }
+
+                text += '💰 <b>Lịch sử nhận ưu đãi:</b>\n';
+                if (myUsagesRes.rows.length === 0) {
+                    text += '• <i>Bạn chưa nhận ưu đãi nào. Đặt lịch khám ngay để tích điểm ví!</i>';
+                } else {
+                    myUsagesRes.rows.forEach(u => {
+                        const dateStr = new Date(u.created_at).toLocaleDateString('vi-VN');
+                        const amtText = formatPrice(u.amount_used);
+                        text += `• <b>${dateStr}</b>: Hoàn <b>+${amtText}</b> từ <i>${u.campaign_name}</i>\n`;
+                    });
+                }
+                await zaloBotService.sendMessage(chatId, text, 'html');
+            } catch (err) {
+                console.error('Error fetching Zalo promotions:', err.message);
+                await zaloBotService.sendMessage(chatId, '❌ Lỗi hệ thống khi lấy thông tin ưu đãi.');
+            }
+            return;
+        }
+
         const startCommands = ['/start', 'start', '/xinchao', 'xinchao', 'bắt đầu', 'bat dau', 'batdau', 'hello', 'hi', 'chào', 'chao', 'dat lich', 'datlich', 'đặt lịch'];
         if (startCommands.includes(normalizedText)) {
             // Show welcome message
@@ -204,7 +299,9 @@ async function handleZaloMessage(chatId, text, fromUser) {
             `4️⃣ <b>nap tien</b> - Hướng dẫn nạp ví tích điểm\n` +
             `5️⃣ <b>lich hen</b> - Xem lịch hẹn khám của bạn\n` +
             `6️⃣ <b>ho tro</b> - Hỗ trợ y tế & Liên hệ\n` +
-            `7️⃣ <b>id</b> - Lấy ID Zalo cá nhân\n\n` +
+            `7️⃣ <b>id</b> - Lấy ID Zalo cá nhân\n` +
+            `8️⃣ <b>lich su</b> - Xem lịch sử giao dịch ví\n` +
+            `9️⃣ <b>uu dai</b> - Xem chương trình ưu đãi của tôi\n\n` +
             `👉 <i>Mẹo: Gõ "huy" bất kỳ lúc nào để hủy tiến trình và quay lại menu này.</i>`;
 
         await zaloBotService.sendMessage(chatId, mainMenu, 'html');
@@ -317,11 +414,9 @@ async function handleZaloMessage(chatId, text, fromUser) {
     if (session.state === 'ASK_PATIENT_TYPE') {
         if (cleanText === '1') {
             session.patientType = 'self';
-            session.patientName = fromUser ? `${fromUser.first_name || ''} ${fromUser.last_name || ''}`.trim() : 'Khách hàng Zalo';
-            if (session.patientName === '') session.patientName = 'Khách hàng Zalo';
-            session.state = 'WAITING_PATIENT_PHONE';
+            session.state = 'WAITING_PATIENT_NAME';
 
-            await zaloBotService.sendMessage(chatId, '📞 Vui lòng nhập <b>Số điện thoại liên hệ</b> của bạn (Ví dụ: 0912345678):', 'html');
+            await zaloBotService.sendMessage(chatId, '👤 Vui lòng nhập <b>Họ tên đầy đủ</b> của bạn (để phòng khám lập hồ sơ y tế):', 'html');
             return;
         } else if (cleanText === '2') {
             session.patientType = 'other';
@@ -334,20 +429,78 @@ async function handleZaloMessage(chatId, text, fromUser) {
         }
     }
 
-    // State 5: WAITING_PATIENT_NAME (only for 'other' patient type)
+    // Helper to process shared contact info (business card or submit info)
+    const processSharedContact = async () => {
+        if (contactInfo && contactInfo.phone) {
+            let phoneInput = contactInfo.phone.replace(/[\s\-\.\+]/g, '');
+            if (phoneInput.length === 9 && !phoneInput.startsWith('0') && !phoneInput.startsWith('84')) {
+                phoneInput = '0' + phoneInput;
+            }
+            if (phoneInput.startsWith('84')) {
+                phoneInput = '0' + phoneInput.substring(2);
+            }
+            session.patientPhone = phoneInput;
+            session.patientName = contactInfo.name || session.patientName || 'Khách hàng Zalo';
+            session.state = 'CONFIRM_BOOKING';
+
+            const product = await productService.getById(session.productId);
+            const user = await userService.get(numericUserId);
+            const balance = user ? user.balance : 0;
+            const hasEnoughBalance = balance >= product.deposit_amount;
+
+            let confirmMsg = 
+                `📝 <b>BẢNG XÁC NHẬN THÔNG TIN ĐẶT LỊCH HẸN</b>\n\n` +
+                `• Gói dịch vụ: <b>${product.name}</b>\n` +
+                `• Ngày khám: <b>${session.dateStr}</b>\n` +
+                `• Khung giờ: <b>${session.timeLabel}</b>\n` +
+                `• Người khám: <b>${session.patientName}</b> (${session.patientType === 'self' ? 'Bản thân' : 'Người thân'})\n` +
+                `• Số điện thoại: <b>${session.patientPhone}</b>\n` +
+                `• Tiền cọc yêu cầu: <b>${formatPrice(product.deposit_amount)}</b>\n` +
+                `• Số dư ví hiện tại: <b>${formatPrice(balance)}</b>\n\n` +
+                `👇 <b>CHỌN PHƯƠNG THỨC THANH TOÁN CỌC:</b>\n` +
+                `<b>[1]</b> Nhận mã QR VietQR chuyển khoản (giữ chỗ 15 phút)\n`;
+
+            if (hasEnoughBalance) {
+                confirmMsg += `<b>[2]</b> Trừ tiền trực tiếp từ ví tích điểm\n`;
+            } else {
+                confirmMsg += `❌ [Ví không đủ số dư] Trừ ví (Nhập nạp tiền ví nếu cần)\n`;
+            }
+            confirmMsg += `<b>[3]</b> Hủy bỏ đăng ký đặt lịch này\n\n`;
+            confirmMsg += `👇 Vui lòng nhập số tương ứng của lựa chọn:`;
+
+            session.hasEnoughBalance = hasEnoughBalance;
+            await zaloBotService.sendMessage(chatId, confirmMsg, 'html');
+            return true;
+        }
+        return false;
+    };
+
+    // State 5: WAITING_PATIENT_NAME
     if (session.state === 'WAITING_PATIENT_NAME') {
+        const isShared = await processSharedContact();
+        if (isShared) return;
+
         if (cleanText.length < 2) {
-            return zaloBotService.sendMessage(chatId, '❌ Họ tên quá ngắn. Vui lòng nhập đầy đủ họ và tên bệnh nhân:');
+            const errorMsg = session.patientType === 'self' ? 
+                '❌ Họ tên quá ngắn. Vui lòng nhập đầy đủ họ và tên của bạn:' : 
+                '❌ Họ tên quá ngắn. Vui lòng nhập đầy đủ họ và tên bệnh nhân:';
+            return zaloBotService.sendMessage(chatId, errorMsg);
         }
         session.patientName = cleanText;
         session.state = 'WAITING_PATIENT_PHONE';
 
-        await zaloBotService.sendMessage(chatId, '📞 Vui lòng nhập <b>Số điện thoại</b> liên hệ của người đi khám (Ví dụ: 0912345678):', 'html');
+        const phoneMsg = session.patientType === 'self' ? 
+            '📞 Vui lòng nhập <b>Số điện thoại liên hệ</b> của bạn (Ví dụ: 0912345678):' : 
+            '📞 Vui lòng nhập <b>Số điện thoại</b> liên hệ của người đi khám (Ví dụ: 0912345678):';
+        await zaloBotService.sendMessage(chatId, phoneMsg, 'html');
         return;
     }
 
     // State 6: WAITING_PATIENT_PHONE
     if (session.state === 'WAITING_PATIENT_PHONE') {
+        const isShared = await processSharedContact();
+        if (isShared) return;
+
         // Clean all spaces, dashes, dots, and +
         let phoneInput = cleanText.replace(/[\s\-\.\+]/g, '');
 
