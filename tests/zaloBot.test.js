@@ -47,10 +47,14 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         originalFetch = globalThis.fetch;
         globalThis.fetch = async (url, options) => {
             // Keep track of internal mock requests
+            const body = options && options.body ? JSON.parse(options.body) : null;
             lastFetchCall = { 
                 url, 
-                options: options ? { ...options, body: JSON.parse(options.body) } : null 
+                options: options ? { ...options, body } : null 
             };
+            if (globalThis.fetchCalls) {
+                globalThis.fetchCalls.push(lastFetchCall);
+            }
             return {
                 ok: true,
                 status: 200,
@@ -62,6 +66,7 @@ test.describe('Zalo Chatbot Integration Tests', () => {
 
     test.beforeEach(() => {
         lastFetchCall = null;
+        globalThis.fetchCalls = [];
     });
 
     test.after(async () => {
@@ -907,6 +912,125 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
+    test('POST /webhook/zalo processes message.unsupported.received event and handles user feedback', async () => {
+        const chatId = '999888777';
+
+        // 1. Test unsupported message when NO active session
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8500,
+                event_name: 'message.unsupported.received',
+                message: {
+                    message_id: 850,
+                    chat: { id: chatId },
+                    from: { id: chatId }
+                }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(globalThis.fetchCalls.length > 0);
+        assert.ok(globalThis.fetchCalls.some(call => call.options && call.options.body && call.options.body.text && call.options.body.text.includes('Định dạng tin nhắn không được hỗ trợ')));
+
+        // Reset calls for step 2
+        globalThis.fetchCalls = [];
+
+        // 2. Start booking flow and progress to WAITING_PATIENT_PHONE
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8501,
+                message: { message_id: 851, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8502,
+                message: { message_id: 852, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8503,
+                message: { message_id: 853, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8504,
+                message: { message_id: 854, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8505,
+                message: { message_id: 855, chat: { id: chatId }, text: '1', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8506,
+                message: { message_id: 856, chat: { id: chatId }, text: 'Kevin Test', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.ok(globalThis.fetchCalls.some(call => call.options && call.options.body && call.options.body.text && call.options.body.text.includes('Số điện thoại liên hệ')));
+
+        // Reset calls for step 3
+        globalThis.fetchCalls = [];
+
+        // 3. Send message.unsupported.received (simulate sharing contact)
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8507,
+                event_name: 'message.unsupported.received',
+                message: {
+                    message_id: 857,
+                    chat: { id: chatId },
+                    from: { id: chatId }
+                }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        
+        assert.ok(globalThis.fetchCalls.some(call => call.options && call.options.body && call.options.body.text && call.options.body.text.includes('Phương thức chia sẻ danh bạ/số điện thoại tự động')));
+
+        // Clean up session
+        await originalFetch(`${baseUrl}/webhook/zalo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
+            body: JSON.stringify({
+                update_id: 8508,
+                message: { message_id: 858, chat: { id: chatId }, text: 'huy', from: { id: chatId } }
+            })
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
     test('POST /webhook/zalo rejects invalid webhook secret', async () => {
         const response = await originalFetch(`${baseUrl}/webhook/zalo`, {
             method: 'POST',
@@ -920,3 +1044,4 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         assert.strictEqual(response.status, 401);
     });
 });
+

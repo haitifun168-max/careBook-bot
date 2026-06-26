@@ -35,6 +35,21 @@ async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
     const cleanText = String(text).trim();
     const normalizedText = cleanText.toLowerCase();
 
+    // Handle unsupported message events
+    if (normalizedText === '_unsupported_msg_') {
+        const session = zaloSessions[chatId];
+        if (session && session.state) {
+            if (session.state === 'WAITING_PATIENT_PHONE') {
+                await zaloBotService.sendMessage(chatId, '⚠️ Phương thức chia sẻ danh bạ/số điện thoại tự động hiện không được Zalo hỗ trợ. Vui lòng nhập trực tiếp 10 chữ số điện thoại từ bàn phím (Ví dụ: 0912345678):');
+            } else {
+                await zaloBotService.sendMessage(chatId, '⚠️ Định dạng tin nhắn này không được hỗ trợ trong quá trình đặt lịch. Vui lòng nhập trực tiếp thông tin bằng văn bản hoặc phím số tương ứng.');
+            }
+            return;
+        }
+        const warningMsg = '⚠️ Định dạng tin nhắn không được hỗ trợ. Vui lòng sử dụng bàn phím để tương tác với các phím số/chữ của hệ thống đặt lịch:';
+        await zaloBotService.sendMessage(chatId, warningMsg);
+    }
+
     // Global cancellation handler
     if (normalizedText === 'huy' || normalizedText === 'hủy' || normalizedText === '0' || normalizedText === '/cancel') {
         delete zaloSessions[chatId];

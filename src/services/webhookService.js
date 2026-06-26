@@ -1645,6 +1645,10 @@ function startWebhookServer(bot) {
                 text = update.info.phone;
             }
 
+            if (!text && update.event_name === 'message.unsupported.received') {
+                text = '_UNSUPPORTED_MSG_';
+            }
+
             const fromUser = (update.message && update.message.from) || { id: chatId };
             const senderName = fromUser ? `${fromUser.first_name || ''} ${fromUser.last_name || ''}`.trim() : 'N/A';
 
