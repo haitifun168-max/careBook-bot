@@ -35,6 +35,9 @@ module.exports = {
     CLINIC_CALENDAR_ID: process.env.CLINIC_CALENDAR_ID || 'primary',
     SLOT_LOCK_MINUTES: 15,
 
+    // Database Connection URL
+    DATABASE_URL: process.env.DATABASE_URL || '',
+
     // Clinic Info
     SHOP_NAME: process.env.SHOP_NAME || 'CareBook Clinic',
     SUPPORT_CONTACT: process.env.SUPPORT_CONTACT || '@carebook_support',

@@ -69,12 +69,13 @@ const runStartupTasks = () => {
     console.log(`🏦 Bank: ${config.BANK.NAME} - ${config.BANK.ACCOUNT}`);
     
     // Cleanup expired appointments on startup
-    try {
-        appointmentService.cleanupExpiredAppointments();
-        console.log('🧹 Đã dọn dẹp các lịch hẹn chờ cọc hết hạn lúc khởi động.');
-    } catch (e) {
-        console.error('⚠️ Không thể dọn dẹp lịch hẹn hết hạn:', e.message);
-    }
+    appointmentService.cleanupExpiredAppointments()
+        .then(() => {
+            console.log('🧹 Đã dọn dẹp các lịch hẹn chờ cọc hết hạn lúc khởi động.');
+        })
+        .catch((e) => {
+            console.error('⚠️ Không thể dọn dẹp lịch hẹn hết hạn:', e.message);
+        });
     
     // Fetch and save bot username dynamically
     bot.telegram.getMe().then((me) => {

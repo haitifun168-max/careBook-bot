@@ -91,13 +91,13 @@ module.exports = (bot) => {
             return ctx.reply('❌ Telegram/Zalo ID hoặc Số tiền không hợp lệ.');
         }
 
-        const user = userService.get(targetIdStr);
+        const user = await userService.get(targetIdStr);
         if (!user) {
             return ctx.reply('❌ Không tìm thấy thông tin bệnh nhân này trong database.');
         }
 
-        userService.addBalance(targetIdStr, amount);
-        const updatedUser = userService.get(targetIdStr);
+        await userService.addBalance(targetIdStr, amount);
+        const updatedUser = await userService.get(targetIdStr);
 
         ctx.replyWithHTML(`✅ Đã cộng <b>${formatPrice(amount)}</b> vào tài khoản của <b>${updatedUser.full_name || targetIdStr}</b>. Số dư mới: <b>${formatPrice(updatedUser.balance)}</b>`);
 
@@ -146,7 +146,7 @@ module.exports = (bot) => {
             return ctx.reply('❌ Telegram/Zalo ID hoặc Số tiền không hợp lệ.');
         }
 
-        const user = userService.get(targetIdStr);
+        const user = await userService.get(targetIdStr);
         if (!user) {
             return ctx.reply('❌ Không tìm thấy thông tin bệnh nhân này trong database.');
         }
@@ -155,8 +155,8 @@ module.exports = (bot) => {
             return ctx.reply(`❌ Số dư ví hiện tại (${formatPrice(user.balance)}) ít hơn số tiền muốn trừ.`);
         }
 
-        userService.deductBalance(targetIdStr, amount);
-        const updatedUser = userService.get(targetIdStr);
+        await userService.deductBalance(targetIdStr, amount);
+        const updatedUser = await userService.get(targetIdStr);
 
         ctx.replyWithHTML(`✅ Đã trừ <b>${formatPrice(amount)}</b> từ tài khoản của <b>${updatedUser.full_name || targetIdStr}</b>. Số dư mới: <b>${formatPrice(updatedUser.balance)}</b>`);
 

@@ -4,140 +4,155 @@ const appointmentService = {
   /**
    * Create a new appointment
    */
-  create({ userId, packageId, patientName, patientPhone, bookingDate, bookingTime, totalPrice, depositAmount, paymentCode }) {
-    const result = db.prepare(`
+  async create({ userId, packageId, patientName, patientPhone, bookingDate, bookingTime, totalPrice, depositAmount, paymentCode }) {
+    const res = await db.query(`
       INSERT INTO appointments (
         user_id, package_id, patient_name, patient_phone, 
         booking_date, booking_time, total_price, deposit_amount, 
         payment_code, status, created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
-    `).run(String(userId), packageId, patientName, patientPhone, bookingDate, bookingTime, totalPrice, depositAmount, paymentCode);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW())
+      RETURNING id
+    `, [String(userId), packageId, patientName, patientPhone, bookingDate, bookingTime, totalPrice, depositAmount, paymentCode]);
 
-    return this.getById(result.lastInsertRowid);
+    return await this.getById(res.rows[0].id);
   },
 
   /**
    * Get appointment by ID
    */
-  getById(id) {
-    return db.prepare(`
-      SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name, p.emoji as package_emoji
+  async getById(id) {
+    const res = await db.query(`
+      SELECT a.*, a.user_id::text as user_id, p.name as package_name, p.emoji as package_emoji
       FROM appointments a
       JOIN products p ON a.package_id = p.id
-      WHERE a.id = ?
-    `).get(id);
+      WHERE a.id = $1
+    `, [id]);
+    return res.rows[0] || null;
   },
 
   /**
    * Get appointment by payment code
    */
-  getByPaymentCode(code) {
+  async getByPaymentCode(code) {
     const cleanCode = code.replace(/[-\s]/g, '').toUpperCase();
-    return db.prepare(`
-      SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name, p.emoji as package_emoji
+    const res = await db.query(`
+      SELECT a.*, a.user_id::text as user_id, p.name as package_name, p.emoji as package_emoji
       FROM appointments a
       JOIN products p ON a.package_id = p.id
-      WHERE REPLACE(REPLACE(a.payment_code, '-', ''), ' ', '') = ?
-    `).get(cleanCode);
+      WHERE REPLACE(REPLACE(a.payment_code, '-', ''), ' ', '') = $1
+    `, [cleanCode]);
+    return res.rows[0] || null;
+  },
+
+  /**
+   * Check if user has an active pending appointment (anti-spam slot lock)
+   */
+  async hasPending(userId) {
+    const res = await db.query(`
+      SELECT COUNT(*) as count FROM appointments
+      WHERE user_id = $1 AND status = 'pending' AND created_at >= NOW() - INTERVAL '15 minutes'
+    `, [String(userId)]);
+    return parseInt(res.rows[0].count) > 0;
   },
 
   /**
    * Get user's pending appointments (active under 15 mins)
    */
-  getPendingByUser(userId) {
-    return db.prepare(`
-      SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name
+  async getPendingByUser(userId) {
+    const res = await db.query(`
+      SELECT a.*, a.user_id::text as user_id, p.name as package_name
       FROM appointments a
       JOIN products p ON a.package_id = p.id
-      WHERE a.user_id = ? 
+      WHERE a.user_id = $1 
         AND a.status = 'pending' 
-        AND a.created_at >= datetime('now', '-15 minutes')
+        AND a.created_at >= NOW() - INTERVAL '15 minutes'
       ORDER BY a.created_at DESC
-    `).all(String(userId));
+    `, [String(userId)]);
+    return res.rows;
   },
 
   /**
    * Get user's recent appointments
    */
-  getRecentByUser(userId, limit = 5) {
-    return db.prepare(`
-      SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name
+  async getRecentByUser(userId, limit = 5) {
+    const res = await db.query(`
+      SELECT a.*, a.user_id::text as user_id, p.name as package_name
       FROM appointments a
       JOIN products p ON a.package_id = p.id
-      WHERE a.user_id = ?
+      WHERE a.user_id = $1
       ORDER BY a.created_at DESC
-      LIMIT ?
-    `).all(String(userId), limit);
+      LIMIT $2
+    `, [String(userId), limit]);
+    return res.rows;
   },
 
   /**
    * Mark appointment as paid / confirmed
    */
-  confirmPayment(id, calendarEventId = null) {
-    const appointment = this.getById(id);
+  async confirmPayment(id, calendarEventId = null) {
+    const appointment = await this.getById(id);
     if (!appointment) return { success: false, error: 'Lịch hẹn không tồn tại' };
     if (appointment.status !== 'pending') return { success: false, error: 'Lịch hẹn đã được xử lý trước đó' };
 
-    db.prepare(`
+    await db.query(`
       UPDATE appointments 
-      SET status = 'confirmed', paid_at = CURRENT_TIMESTAMP, calendar_event_id = ?, calendar_sync_status = ?
-      WHERE id = ?
-    `).run(calendarEventId, calendarEventId ? 'synced' : 'pending', id);
+      SET status = 'confirmed', paid_at = NOW(), calendar_event_id = $1, calendar_sync_status = $2
+      WHERE id = $3
+    `, [calendarEventId, calendarEventId ? 'synced' : 'pending', id]);
 
-    return { success: true, appointment: this.getById(id) };
+    return { success: true, appointment: await this.getById(id) };
   },
 
   /**
    * Mark appointment as checked-in (completed)
    */
-  checkIn(id) {
-    const appointment = this.getById(id);
+  async checkIn(id) {
+    const appointment = await this.getById(id);
     if (!appointment) return { success: false, error: 'Lịch hẹn không tồn tại' };
     if (appointment.status !== 'confirmed') return { success: false, error: 'Chỉ có thể check-in lịch hẹn đã xác nhận' };
 
-    db.prepare(`
+    await db.query(`
       UPDATE appointments 
-      SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(id);
+      SET status = 'completed', completed_at = NOW()
+      WHERE id = $1
+    `, [id]);
 
-    return { success: true, appointment: this.getById(id) };
+    return { success: true, appointment: await this.getById(id) };
   },
 
   /**
    * Cancel appointment
    */
-  cancel(id) {
-    const appointment = this.getById(id);
+  async cancel(id) {
+    const appointment = await this.getById(id);
     if (!appointment) return { success: false, error: 'Lịch hẹn không tồn tại' };
     
-    db.prepare(`
+    await db.query(`
       UPDATE appointments 
       SET status = 'cancelled'
-      WHERE id = ?
-    `).run(id);
+      WHERE id = $1
+    `, [id]);
 
     return { success: true };
   },
 
   /**
    * Get count of occupied slots for a given date
-   * Returns object: { "08:00 - 09:00": 2, "09:00 - 10:00": 1 }
    */
-  getOccupiedSlotCounts(dateStr) {
-    const rows = db.prepare(`
+  async getOccupiedSlotCounts(dateStr) {
+    const res = await db.query(`
       SELECT booking_time, COUNT(*) as count
       FROM appointments
-      WHERE booking_date = ?
+      WHERE booking_date = $1
         AND status != 'cancelled'
-        AND (status != 'pending' OR created_at >= datetime('now', '-15 minutes'))
+        AND (status != 'pending' OR created_at >= NOW() - INTERVAL '15 minutes')
       GROUP BY booking_time
-    `).all(dateStr);
+    `, [dateStr]);
 
     const counts = {};
-    rows.forEach(r => {
-      counts[r.booking_time] = r.count;
+    res.rows.forEach(r => {
+      counts[r.booking_time] = parseInt(r.count);
     });
     return counts;
   },
@@ -145,55 +160,105 @@ const appointmentService = {
   /**
    * Get all clinic hours
    */
-  getClinicHours() {
-    return db.prepare('SELECT * FROM clinic_hours WHERE is_active = 1').all();
+  async getClinicHours() {
+    const res = await db.query('SELECT * FROM clinic_hours WHERE is_active = 1');
+    return res.rows;
   },
 
   /**
    * Get clinic hour by ID
    */
-  getClinicHourById(id) {
-    return db.prepare('SELECT * FROM clinic_hours WHERE id = ?').get(id);
+  async getClinicHourById(id) {
+    const res = await db.query('SELECT * FROM clinic_hours WHERE id = $1', [id]);
+    return res.rows[0] || null;
   },
 
   /**
    * Check if a specific date and hour slot is available
    */
-  isSlotAvailable(dateStr, timeLabel, maxCapacity) {
-    const result = db.prepare(`
+  async isSlotAvailable(dateStr, timeLabel, maxCapacity) {
+    const res = await db.query(`
       SELECT COUNT(*) as count
       FROM appointments
-      WHERE booking_date = ?
-        AND booking_time = ?
+      WHERE booking_date = $1
+        AND booking_time = $2
         AND status != 'cancelled'
-        AND (status != 'pending' OR created_at >= datetime('now', '-15 minutes'))
-    `).get(dateStr, timeLabel);
+        AND (status != 'pending' OR created_at >= NOW() - INTERVAL '15 minutes')
+    `, [dateStr, timeLabel]);
 
-    return result.count < maxCapacity;
+    return parseInt(res.rows[0].count) < maxCapacity;
+  },
+
+  /**
+   * Create appointment safely using a PostgreSQL Transaction for concurrency locking
+   */
+  async createSafe(data) {
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      
+      const hourRes = await client.query('SELECT max_capacity, is_active FROM clinic_hours WHERE time_label = $1', [data.bookingTime]);
+      const hour = hourRes.rows[0];
+      if (!hour || hour.is_active !== 1) throw new Error('SLOT_INACTIVE');
+      
+      const countRes = await client.query(`
+        SELECT COUNT(*) as count FROM appointments
+        WHERE booking_date = $1 AND booking_time = $2 AND status != 'cancelled'
+          AND (status != 'pending' OR created_at >= NOW() - INTERVAL '15 minutes')
+      `, [data.bookingDate, data.bookingTime]);
+      
+      const count = parseInt(countRes.rows[0].count);
+      if (count >= hour.max_capacity) throw new Error('SLOT_FULL');
+      
+      const insertRes = await client.query(`
+        INSERT INTO appointments (
+          user_id, package_id, patient_name, patient_phone, 
+          booking_date, booking_time, total_price, deposit_amount, 
+          payment_code, status, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW())
+        RETURNING id
+      `, [String(data.userId), data.packageId, data.patientName, data.patientPhone, data.bookingDate, data.bookingTime, data.totalPrice, data.depositAmount, data.paymentCode]);
+      
+      await client.query('COMMIT');
+      return insertRes.rows[0].id;
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   },
 
   /**
    * Cancel all pending appointments that are older than 15 minutes
    */
-  cleanupExpiredAppointments() {
-    return db.prepare(`
+  async cleanupExpiredAppointments() {
+    return await db.query(`
       UPDATE appointments
       SET status = 'cancelled'
-      WHERE status = 'pending' AND created_at <= datetime('now', '-15 minutes')
-    `).run();
+      WHERE status = 'pending' AND created_at <= NOW() - INTERVAL '15 minutes'
+    `);
   },
 
   /**
    * Get stats for Dashboard
    */
-  getStats() {
-    const totalAppointments = db.prepare("SELECT COUNT(*) as c FROM appointments WHERE status IN ('confirmed', 'completed')").get().c;
-    const totalRevenue = db.prepare("SELECT COALESCE(SUM(deposit_amount), 0) as s FROM appointments WHERE status IN ('confirmed', 'completed')").get().s;
-    const pendingAppointments = db.prepare(`
+  async getStats() {
+    const totalAppointmentsRes = await db.query("SELECT COUNT(*) as c FROM appointments WHERE status IN ('confirmed', 'completed')");
+    const totalAppointments = parseInt(totalAppointmentsRes.rows[0].c);
+
+    const totalRevenueRes = await db.query("SELECT COALESCE(SUM(deposit_amount), 0) as s FROM appointments WHERE status IN ('confirmed', 'completed')");
+    const totalRevenue = parseInt(totalRevenueRes.rows[0].s);
+
+    const pendingAppointmentsRes = await db.query(`
       SELECT COUNT(*) as c FROM appointments 
-      WHERE status = 'pending' AND created_at >= datetime('now', '-15 minutes')
-    `).get().c;
-    const totalUsers = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+      WHERE status = 'pending' AND created_at >= NOW() - INTERVAL '15 minutes'
+    `);
+    const pendingAppointments = parseInt(pendingAppointmentsRes.rows[0].c);
+
+    const totalUsersRes = await db.query('SELECT COUNT(*) as c FROM users');
+    const totalUsers = parseInt(totalUsersRes.rows[0].c);
 
     return { totalAppointments, totalRevenue, pendingAppointments, totalUsers };
   }

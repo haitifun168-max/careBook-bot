@@ -1,239 +1,187 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
+const config = require('./config');
 
-// Ensure data directory exists
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+if (!config.DATABASE_URL) {
+  console.error('❌ DATABASE_URL chưa được cấu hình! Hãy cập nhật file .env');
+  process.exit(1);
 }
 
-const db = new Database(path.join(dataDir, 'shop.db'));
+const parse = require('pg-connection-string').parse;
+const poolConfig = parse(config.DATABASE_URL);
+poolConfig.ssl = config.DATABASE_URL.includes('localhost') || config.DATABASE_URL.includes('127.0.0.1') ? false : { rejectUnauthorized: false };
 
-// Enable WAL mode for better performance
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const pool = new Pool(poolConfig);
 
-// Run automatic migration to convert user ID columns from INTEGER to TEXT if necessary
-try {
-  const tableInfo = db.prepare("PRAGMA table_info(users)").all();
-  const idColumn = tableInfo.find(c => c.name === 'telegram_id');
+const initDb = async () => {
+  try {
+    console.log('🔄 Đang kết nối và khởi tạo Cloud PostgreSQL...');
+    
+    // Create users table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        telegram_id VARCHAR(255) PRIMARY KEY,
+        username VARCHAR(255),
+        full_name VARCHAR(255),
+        balance INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-  if (idColumn && idColumn.type === 'INTEGER') {
-    console.log('🔄 Migrating database schema: Changing user ID columns from INTEGER to TEXT...');
-    db.pragma('foreign_keys = OFF');
-    try {
-      db.transaction(() => {
-        db.exec(`
-          ALTER TABLE users RENAME TO users_old;
-          ALTER TABLE appointments RENAME TO appointments_old;
-          ALTER TABLE deposits RENAME TO deposits_old;
-          
-          CREATE TABLE users (
-            telegram_id TEXT PRIMARY KEY,
-            username TEXT,
-            full_name TEXT,
-            balance INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
+    // Create categories table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        emoji VARCHAR(50) DEFAULT '📦',
+        sort_order INTEGER DEFAULT 0
+      );
+    `);
 
-          CREATE TABLE appointments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            package_id INTEGER NOT NULL,
-            patient_name TEXT NOT NULL,
-            patient_phone TEXT NOT NULL,
-            booking_date TEXT NOT NULL,
-            booking_time TEXT NOT NULL,
-            total_price INTEGER NOT NULL,
-            deposit_amount INTEGER NOT NULL,
-            payment_code TEXT UNIQUE NOT NULL,
-            status TEXT DEFAULT 'pending',
-            calendar_event_id TEXT,
-            calendar_sync_status TEXT DEFAULT 'pending',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            paid_at DATETIME,
-            completed_at DATETIME,
-            FOREIGN KEY (package_id) REFERENCES products(id),
-            FOREIGN KEY (user_id) REFERENCES users(telegram_id)
-          );
+    // Create products table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+        name VARCHAR(255) NOT NULL,
+        price INTEGER NOT NULL,
+        description TEXT,
+        emoji VARCHAR(50) DEFAULT '📦',
+        promotion VARCHAR(255),
+        contact_only INTEGER DEFAULT 0,
+        contact_url VARCHAR(255),
+        sheet_stock INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        deposit_amount INTEGER DEFAULT 0
+      );
+    `);
 
-          CREATE TABLE deposits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            amount INTEGER NOT NULL,
-            payment_code TEXT UNIQUE NOT NULL,
-            status TEXT DEFAULT 'pending',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            completed_at DATETIME,
-            FOREIGN KEY (user_id) REFERENCES users(telegram_id)
-          );
-          
-          INSERT INTO users (telegram_id, username, full_name, balance, created_at)
-          SELECT CAST(telegram_id AS TEXT), username, full_name, balance, created_at FROM users_old;
+    // Create appointments table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS appointments (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) REFERENCES users(telegram_id) ON DELETE CASCADE,
+        package_id INTEGER REFERENCES products(id) ON DELETE RESTRICT,
+        patient_name VARCHAR(255) NOT NULL,
+        patient_phone VARCHAR(50) NOT NULL,
+        booking_date VARCHAR(50) NOT NULL,
+        booking_time VARCHAR(50) NOT NULL,
+        total_price INTEGER NOT NULL,
+        deposit_amount INTEGER NOT NULL,
+        payment_code VARCHAR(255) UNIQUE NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        calendar_event_id VARCHAR(255),
+        calendar_sync_status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        paid_at TIMESTAMP,
+        completed_at TIMESTAMP
+      );
+    `);
 
-          INSERT INTO appointments (id, user_id, package_id, patient_name, patient_phone, booking_date, booking_time, total_price, deposit_amount, payment_code, status, calendar_event_id, calendar_sync_status, created_at, paid_at, completed_at)
-          SELECT id, CAST(user_id AS TEXT), package_id, patient_name, patient_phone, booking_date, booking_time, total_price, deposit_amount, payment_code, status, calendar_event_id, calendar_sync_status, created_at, paid_at, completed_at FROM appointments_old;
+    // Create clinic_hours table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS clinic_hours (
+        id SERIAL PRIMARY KEY,
+        time_label VARCHAR(50) UNIQUE NOT NULL,
+        max_capacity INTEGER DEFAULT 1,
+        is_active INTEGER DEFAULT 1
+      );
+    `);
 
-          INSERT INTO deposits (id, user_id, amount, payment_code, status, created_at, completed_at)
-          SELECT id, CAST(user_id AS TEXT), amount, payment_code, status, created_at, completed_at FROM deposits_old;
-          
-          DROP TABLE users_old;
-          DROP TABLE appointments_old;
-          DROP TABLE deposits_old;
-        `);
-      })();
-      console.log('✅ Database schema migration completed successfully!');
-    } catch (error) {
-      console.error('❌ Database migration failed:', error);
-      throw error;
-    } finally {
-      db.pragma('foreign_keys = ON');
+    // Create dashboard_users table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dashboard_users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        telegram_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Create deposits table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS deposits (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) REFERENCES users(telegram_id) ON DELETE CASCADE,
+        amount INTEGER NOT NULL,
+        payment_code VARCHAR(255) UNIQUE NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      );
+    `);
+
+    // Create sessions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        session_id VARCHAR(255) PRIMARY KEY,
+        username VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Seed categories
+    const catCountRes = await pool.query('SELECT COUNT(*) as c FROM categories');
+    if (parseInt(catCountRes.rows[0].c) === 0) {
+      console.log('📦 Seeding initial clinic categories...');
+      await pool.query("INSERT INTO categories (name, emoji, sort_order) VALUES ('Nha khoa thẩm mỹ', '🦷', 1)");
+      await pool.query("INSERT INTO categories (name, emoji, sort_order) VALUES ('Tiểu phẫu & Điều trị', '🩺', 2)");
+      await pool.query("INSERT INTO categories (name, emoji, sort_order) VALUES ('Chăm sóc tổng quát', '✨', 3)");
     }
+
+    // Seed packages (products)
+    const prodCountRes = await pool.query('SELECT COUNT(*) as c FROM products');
+    if (parseInt(prodCountRes.rows[0].c) === 0) {
+      console.log('📦 Seeding initial medical packages...');
+      const insertProdSql = `
+        INSERT INTO products (category_id, name, price, deposit_amount, emoji, promotion, description)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `;
+      // Category 1: Nha khoa thẩm mỹ
+      await pool.query(insertProdSql, [1, 'Tẩy trắng răng Laser', 1500000, 100000, '🦷', '🎁 Giảm 10% khi đặt trước', 'Tẩy trắng răng công nghệ Laser Whitening nhanh chóng, hiệu quả lâu dài.']);
+      await pool.query(insertProdSql, [1, 'Bọc răng sứ Venus', 3000000, 200000, '👑', null, 'Răng sứ Venus nhập khẩu Đức, bảo hành 5 năm.']);
+      // Category 2: Tiểu phẫu & Điều trị
+      await pool.query(insertProdSql, [2, 'Nhổ răng khôn (không đau)', 1200000, 100000, '🩺', null, 'Nhổ răng khôn công nghệ Piezotome hạn chế sưng đau.']);
+      await pool.query(insertProdSql, [2, 'Trị sâu răng / Trám răng', 300000, 50000, '🦷', null, 'Trám răng thẩm mỹ bằng chất liệu composite cao cấp.']);
+      // Category 3: Chăm sóc tổng quát
+      await pool.query(insertProdSql, [3, 'Lấy cao răng & Đánh bóng', 150000, 50000, '✨', null, 'Lấy cao răng siêu âm nhẹ nhàng, sạch mảng bám.']);
+    }
+
+    // Seed clinic hours
+    const hoursCountRes = await pool.query('SELECT COUNT(*) as c FROM clinic_hours');
+    if (parseInt(hoursCountRes.rows[0].c) === 0) {
+      console.log('📅 Seeding clinic hours slots...');
+      const insertHourSql = 'INSERT INTO clinic_hours (time_label, max_capacity) VALUES ($1, $2)';
+      await pool.query(insertHourSql, ['08:00 - 09:00', 2]);
+      await pool.query(insertHourSql, ['09:00 - 10:00', 2]);
+      await pool.query(insertHourSql, ['10:00 - 11:00', 2]);
+      await pool.query(insertHourSql, ['11:00 - 12:00', 2]);
+      await pool.query(insertHourSql, ['13:30 - 14:30', 2]);
+      await pool.query(insertHourSql, ['14:30 - 15:30', 2]);
+      await pool.query(insertHourSql, ['15:30 - 16:30', 2]);
+      await pool.query(insertHourSql, ['16:30 - 17:30', 1]);
+    }
+
+    // Seed default admin dashboard user
+    const userCountRes = await pool.query('SELECT COUNT(*) as c FROM dashboard_users');
+    if (parseInt(userCountRes.rows[0].c) === 0) {
+      console.log('🔐 Seeding default admin dashboard user...');
+      await pool.query(
+        "INSERT INTO dashboard_users (username, password_hash, role) VALUES ($1, $2, $3)",
+        ['admin', 'c1a2b3d4e5f67890:0420ac8de5c476a06648594bc97f832d37900f79f6cf5ff4790c7a95965018e05ba521ff202af4685c3d1cc32364c2e7452d6d2aa310f19e4ba834d9d934456f', 'admin']
+      );
+    }
+
+    console.log('✅ Khởi tạo cơ sở dữ liệu PostgreSQL thành công!');
+  } catch (error) {
+    console.error('❌ Lỗi khởi tạo cơ sở dữ liệu PostgreSQL:', error);
+    process.exit(1);
   }
-} catch (e) {
-  // users table might not exist yet
-}
+};
 
-// Create tables
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    telegram_id TEXT PRIMARY KEY,
-    username TEXT,
-    full_name TEXT,
-    balance INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+const initPromise = initDb();
+pool.initPromise = initPromise;
 
-  CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    emoji TEXT DEFAULT '📦',
-    sort_order INTEGER DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category_id INTEGER,
-    name TEXT NOT NULL,
-    price INTEGER NOT NULL,
-    description TEXT,
-    emoji TEXT DEFAULT '📦',
-    promotion TEXT,
-    contact_only INTEGER DEFAULT 0,
-    contact_url TEXT,
-    sheet_stock INTEGER DEFAULT 0,
-    is_active INTEGER DEFAULT 1,
-    deposit_amount INTEGER DEFAULT 0,
-    FOREIGN KEY (category_id) REFERENCES categories(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS appointments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL,
-    package_id INTEGER NOT NULL,
-    patient_name TEXT NOT NULL,
-    patient_phone TEXT NOT NULL,
-    booking_date TEXT NOT NULL,
-    booking_time TEXT NOT NULL,
-    total_price INTEGER NOT NULL,
-    deposit_amount INTEGER NOT NULL,
-    payment_code TEXT UNIQUE NOT NULL,
-    status TEXT DEFAULT 'pending',
-    calendar_event_id TEXT,
-    calendar_sync_status TEXT DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    paid_at DATETIME,
-    completed_at DATETIME,
-    FOREIGN KEY (package_id) REFERENCES products(id),
-    FOREIGN KEY (user_id) REFERENCES users(telegram_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS clinic_hours (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    time_label TEXT UNIQUE NOT NULL,
-    max_capacity INTEGER DEFAULT 1,
-    is_active INTEGER DEFAULT 1
-  );
-
-  CREATE TABLE IF NOT EXISTS dashboard_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    role TEXT NOT NULL,              -- 'admin', 'receptionist', 'doctor'
-    telegram_id TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS deposits (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL,
-    amount INTEGER NOT NULL,
-    payment_code TEXT UNIQUE NOT NULL,
-    status TEXT DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    completed_at DATETIME,
-    FOREIGN KEY (user_id) REFERENCES users(telegram_id)
-  );
-`);
-
-// Safe migrations for existing databases
-try { db.exec('ALTER TABLE products ADD COLUMN contact_url TEXT'); } catch (e) { /* already exists */ }
-try { db.exec('ALTER TABLE products ADD COLUMN sheet_stock INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
-try { db.exec('ALTER TABLE products ADD COLUMN deposit_amount INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
-
-// Seed categories if categories table is empty
-const catCount = db.prepare('SELECT COUNT(*) as c FROM categories').get();
-if (catCount.c === 0) {
-  console.log('📦 Seeding initial clinic categories...');
-  const insertCat = db.prepare('INSERT INTO categories (name, emoji, sort_order) VALUES (?, ?, ?)');
-  insertCat.run('Nha khoa thẩm mỹ', '🦷', 1);
-  insertCat.run('Tiểu phẫu & Điều trị', '🩺', 2);
-  insertCat.run('Chăm sóc tổng quát', '✨', 3);
-}
-
-// Seed packages (products) if products table is empty
-const prodCount = db.prepare('SELECT COUNT(*) as c FROM products').get();
-if (prodCount.c === 0) {
-  console.log('📦 Seeding initial medical packages...');
-  const insertProd = db.prepare(`
-    INSERT INTO products (category_id, name, price, deposit_amount, emoji, promotion, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  // Category 1: Nha khoa thẩm mỹ
-  insertProd.run(1, 'Tẩy trắng răng Laser', 1500000, 100000, '🦷', '🎁 Giảm 10% khi đặt trước', 'Tẩy trắng răng công nghệ Laser Whitening nhanh chóng, hiệu quả lâu dài.');
-  insertProd.run(1, 'Bọc răng sứ Venus', 3000000, 200000, '👑', null, 'Răng sứ Venus nhập khẩu Đức, bảo hành 5 năm.');
-  
-  // Category 2: Tiểu phẫu & Điều trị
-  insertProd.run(2, 'Nhổ răng khôn (không đau)', 1200000, 100000, '🩺', null, 'Nhổ răng khôn công nghệ Piezotome hạn chế sưng đau.');
-  insertProd.run(2, 'Trị sâu răng / Trám răng', 300000, 50000, '🦷', null, 'Trám răng thẩm mỹ bằng chất liệu composite cao cấp.');
-
-  // Category 3: Chăm sóc tổng quát
-  insertProd.run(3, 'Lấy cao răng & Đánh bóng', 150000, 50000, '✨', null, 'Lấy cao răng siêu âm nhẹ nhàng, sạch mảng bám.');
-}
-
-// Seed clinic hours if clinic_hours table is empty
-const hoursCount = db.prepare('SELECT COUNT(*) as c FROM clinic_hours').get();
-if (hoursCount.c === 0) {
-  console.log('📅 Seeding clinic hours slots...');
-  const insertHour = db.prepare('INSERT INTO clinic_hours (time_label, max_capacity) VALUES (?, ?)');
-  insertHour.run('08:00 - 09:00', 2);
-  insertHour.run('09:00 - 10:00', 2);
-  insertHour.run('10:00 - 11:00', 2);
-  insertHour.run('11:00 - 12:00', 2);
-  insertHour.run('13:30 - 14:30', 2);
-  insertHour.run('14:30 - 15:30', 2);
-  insertHour.run('15:30 - 16:30', 2);
-  insertHour.run('16:30 - 17:30', 1);
-}
-
-// Seed default admin dashboard user if dashboard_users is empty
-const userCount = db.prepare('SELECT COUNT(*) as c FROM dashboard_users').get();
-if (userCount.c === 0) {
-  console.log('🔐 Seeding default admin dashboard user...');
-  const insertUser = db.prepare('INSERT INTO dashboard_users (username, password_hash, role) VALUES (?, ?, ?)');
-  // Default user: admin / admin123
-  insertUser.run('admin', 'c1a2b3d4e5f67890:0420ac8de5c476a06648594bc97f832d37900f79f6cf5ff4790c7a95965018e05ba521ff202af4685c3d1cc32364c2e7452d6d2aa310f19e4ba834d9d934456f', 'admin');
-}
-
-module.exports = db;
+module.exports = pool;

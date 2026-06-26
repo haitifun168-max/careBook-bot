@@ -9,9 +9,6 @@ const userService = require('./userService');
 const db = require('../database');
 const messages = require('../utils/messages');
 
-// In-memory session store mapping sessionId -> { username, role }
-const activeSessions = {};
-
 // In-memory token store mapping tempToken -> { username, role, expiresAt }
 const activeTempTokens = {};
 
@@ -22,8 +19,7 @@ function extractPaymentCode(content) {
     const regex = new RegExp(`(?:${escapedPrefix}|NAP\\s*PAY)\\s*-?\\s*([A-Z0-9]{6,20})`, 'i');
     const match = content.match(regex);
     if (match) {
-        // Lấy chính xác tiền tố mà người dùng đã nhập để phản hồi khớp với database
-        const matchedPrefix = content.substring(match.index, match.index + match[0].indexOf(match[1])).trim().replace(/\s*-?\s*$/, '');
+        const matchedPrefix = content.substring(match.index, match.index + match[0].indexOf(match[1])).trim().replace(/\s*-?\\s*$/, '');
         const normalizedPrefix = matchedPrefix.toUpperCase().replace(/\s+/g, ' ');
         if (normalizedPrefix === 'NAP PAY') {
             return `NAP PAY-${match[1].toUpperCase()}`;
@@ -68,34 +64,54 @@ function startWebhookServer(bot) {
         console.log(`📢 Telegram Webhook path registered at: ${telegramSecretPath}`);
     }
 
-    // Middleware to check authentication and authorization (RBAC)
+    // Middleware to check authentication and authorization (RBAC) using DB Sessions
     function checkRole(allowedRoles) {
-        return (req, res, next) => {
+        return async (req, res, next) => {
             const cookies = parseCookies(req.headers.cookie);
             const sessionId = cookies.session_id;
 
-            if (!sessionId || !activeSessions[sessionId]) {
+            if (!sessionId) {
                 if (req.xhr || req.path.includes('/api/')) {
                     return res.status(401).json({ error: 'Unauthorized. Phiên làm việc hết hạn.' });
                 }
                 return res.redirect('/admin/login');
             }
 
-            const userSession = activeSessions[sessionId];
-            if (!allowedRoles.includes(userSession.role)) {
-                return res.status(403).json({ error: 'Forbidden. Bạn không có quyền thực hiện hành động này.' });
-            }
+            try {
+                const sessionRes = await db.query('SELECT * FROM sessions WHERE session_id = $1', [sessionId]);
+                const userSession = sessionRes.rows[0];
 
-            req.session = userSession;
-            next();
+                if (!userSession) {
+                    if (req.xhr || req.path.includes('/api/')) {
+                        return res.status(401).json({ error: 'Unauthorized. Phiên làm việc hết hạn.' });
+                    }
+                    return res.redirect('/admin/login');
+                }
+
+                if (!allowedRoles.includes(userSession.role)) {
+                    return res.status(403).json({ error: 'Forbidden. Bạn không có quyền thực hiện hành động này.' });
+                }
+
+                req.session = userSession;
+                next();
+            } catch (err) {
+                console.error('Session verification error:', err);
+                return res.status(500).json({ error: 'Internal server error' });
+            }
         };
     }
 
     // Helper: Check if authenticated for dashboard pages
-    function isAuthenticated(req) {
+    async function isAuthenticated(req) {
         const cookies = parseCookies(req.headers.cookie);
         const sessionId = cookies.session_id;
-        return sessionId && activeSessions[sessionId];
+        if (!sessionId) return false;
+        try {
+            const sessionRes = await db.query('SELECT * FROM sessions WHERE session_id = $1', [sessionId]);
+            return sessionRes.rows.length > 0;
+        } catch (e) {
+            return false;
+        }
     }
 
     // ═══════════════════════════════════════
@@ -124,7 +140,6 @@ function startWebhookServer(bot) {
         console.log(`🏦 Nhận webhook SePay: "${rawContent}" (Mã cọc: ${paymentCode}) | Số tiền: ${amount}`);
 
         if (!paymentCode) {
-            // Support SePay test webhook connection
             if (rawContent.toUpperCase().includes('TEST') || rawContent.toUpperCase().includes('SEPAY')) {
                 console.log(`🔍 Nhận webhook thử nghiệm từ SePay. Phản hồi OK.`);
                 return res.json({ success: true, message: 'Test connection successful' });
@@ -136,14 +151,15 @@ function startWebhookServer(bot) {
 
         try {
             // Find pending appointment matching paymentCode
-            const appointment = appointmentService.getByPaymentCode(paymentCode);
+            const appointment = await appointmentService.getByPaymentCode(paymentCode);
             
             if (appointment) {
                 if (appointment.status === 'cancelled') {
                     console.log(`⏳ Webhook: Lịch hẹn #${appointment.id} đã bị hủy trước đó. Kiểm tra khả năng khôi phục...`);
                     
-                    const hour = appointmentService.getClinicHours().find(h => h.time_label === appointment.booking_time);
-                    const occupiedCounts = appointmentService.getOccupiedSlotCounts(appointment.booking_date);
+                    const clinicHours = await appointmentService.getClinicHours();
+                    const hour = clinicHours.find(h => h.time_label === appointment.booking_time);
+                    const occupiedCounts = await appointmentService.getOccupiedSlotCounts(appointment.booking_date);
                     const count = occupiedCounts[appointment.booking_time] || 0;
                     const available = hour && hour.is_active && count < hour.max_capacity;
 
@@ -156,13 +172,13 @@ function startWebhookServer(bot) {
                             calendarEventId = syncResult.eventId;
                         }
 
-                        db.prepare(`
+                        await db.query(`
                             UPDATE appointments 
-                            SET status = 'confirmed', paid_at = CURRENT_TIMESTAMP, calendar_event_id = ?, calendar_sync_status = ?
-                            WHERE id = ?
-                        `).run(calendarEventId, calendarEventId ? 'synced' : 'pending', appointment.id);
+                            SET status = 'confirmed', paid_at = NOW(), calendar_event_id = $1, calendar_sync_status = $2
+                            WHERE id = $3
+                        `, [calendarEventId, calendarEventId ? 'synced' : 'pending', appointment.id]);
 
-                        const recoveredAppt = appointmentService.getById(appointment.id);
+                        const recoveredAppt = await appointmentService.getById(appointment.id);
 
                         try {
                             const isZalo = String(appointment.user_id).length >= 12;
@@ -199,12 +215,12 @@ function startWebhookServer(bot) {
                         try {
                             const notifyMsg = 
                                 `⚠️ <b>KHÔI PHỤC LỊCH HẸN TRỄ CỌC #${appointment.id}</b>\n\n` +
-                                `🩺 Dịch vụ: <b>${appointment.package_name}</b>\n` +
-                                `👤 Bệnh nhân: <b>${appointment.patient_name}</b>\n` +
-                                `📅 Ngày khám: ${appointment.booking_date}\n` +
-                                `⏱️ Khung giờ: ${appointment.booking_time}\n` +
-                                `💵 Tiền cọc: ${new Intl.NumberFormat('vi-VN').format(amount)}đ\n` +
-                                `📅 Google Calendar Sync: ${calendarEventId ? '🟢 OK' : '⚠️ LỖI'}`;
+                                    `🩺 Dịch vụ: <b>${appointment.package_name}</b>\n` +
+                                    `👤 Bệnh nhân: <b>${appointment.patient_name}</b>\n` +
+                                    `📅 Ngày khám: ${appointment.booking_date}\n` +
+                                    `⏱️ Khung giờ: ${appointment.booking_time}\n` +
+                                    `💵 Tiền cọc: ${new Intl.NumberFormat('vi-VN').format(amount)}đ\n` +
+                                    `📅 Google Calendar Sync: ${calendarEventId ? '🟢 OK' : '⚠️ LỖI'}`;
                             await bot.telegram.sendMessage(config.ADMIN_ID, notifyMsg, { parse_mode: 'HTML' });
                         } catch (err) {
                             console.error('Failed to notify admin:', err.message);
@@ -214,8 +230,8 @@ function startWebhookServer(bot) {
                     } else {
                         console.log(`❌ Khung giờ đã đầy. Tự động hoàn cọc vào ví tích điểm cho user ${appointment.user_id}...`);
 
-                        userService.addBalance(appointment.user_id, amount);
-                        const updatedUser = userService.get(appointment.user_id);
+                        await userService.addBalance(appointment.user_id, amount);
+                        const updatedUser = await userService.get(appointment.user_id);
                         
                         const formattedPrice = new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
                         const totalBalance = new Intl.NumberFormat('vi-VN').format(updatedUser.balance) + 'đ';
@@ -289,7 +305,7 @@ function startWebhookServer(bot) {
                 }
 
                 // Confirm payment & sync
-                const confirmResult = appointmentService.confirmPayment(appointment.id, calendarEventId);
+                const confirmResult = await appointmentService.confirmPayment(appointment.id, calendarEventId);
                 
                 if (confirmResult.success) {
                     console.log(`✅ Webhook đã thanh toán cọc & xác nhận lịch hẹn #${appointment.id}`);
@@ -340,19 +356,20 @@ function startWebhookServer(bot) {
 
             // Check pending deposits if no appointment was found
             const cleanCode = paymentCode.replace(/[-\s]/g, '').toUpperCase();
-            const deposit = db.prepare(`
-                SELECT *, CAST(user_id AS TEXT) as user_id FROM deposits 
-                WHERE REPLACE(REPLACE(payment_code, '-', ''), ' ', '') = ? 
+            const depositRes = await db.query(`
+                SELECT * FROM deposits 
+                WHERE REPLACE(REPLACE(payment_code, '-', ''), ' ', '') = $1 
                   AND status = 'pending'
-            `).get(cleanCode);
+            `, [cleanCode]);
+            const deposit = depositRes.rows[0];
             
             if (deposit) {
                 // Complete deposit status
-                db.prepare("UPDATE deposits SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?").run(deposit.id);
+                await db.query("UPDATE deposits SET status = 'completed', completed_at = NOW() WHERE id = $1", [deposit.id]);
                 
                 // Add balance to user
-                userService.addBalance(deposit.user_id, amount);
-                const updatedUser = userService.get(deposit.user_id);
+                await userService.addBalance(deposit.user_id, amount);
+                const updatedUser = await userService.get(deposit.user_id);
                 
                 const formattedPrice = new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
                 const totalBalance = new Intl.NumberFormat('vi-VN').format(updatedUser.balance) + 'đ';
@@ -402,8 +419,7 @@ function startWebhookServer(bot) {
                 return res.json({ success: true, message: `Deposit for user ${deposit.user_id} completed` });
             }
 
-            // Fallback for static ID deposits (both Telegram and Zalo)
-            // e.g. paymentCode is "CB-5PE61284DOFBI" or "NAP PAY-530718471553674179"
+            // Fallback for static ID deposits
             const staticIdPrefix = config.PAYMENT_PREFIX || 'CB';
             const escapedStaticIdPrefix = staticIdPrefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
             const staticIdRegex = new RegExp(`^(?:${escapedStaticIdPrefix}|NAP\\s*PAY)\\s*-?\\s*([A-Z0-9]{6,20})$`, 'i');
@@ -413,28 +429,26 @@ function startWebhookServer(bot) {
                 const codeSuffix = staticIdMatch[1];
                 let targetUserIdStr = null;
 
-                // Nếu là thuần số thì là ID gốc chưa mã hóa (tương thích ngược hoặc debug)
                 if (/^\d+$/.test(codeSuffix)) {
                     targetUserIdStr = codeSuffix;
                 } else {
-                    // Cố gắng giải mã từ mã hóa tĩnh Base36
                     const paymentService = require('./paymentService');
                     targetUserIdStr = paymentService.decryptUserId(codeSuffix);
                 }
 
                 if (targetUserIdStr) {
                     const targetUserId = targetUserIdStr;
-                    const user = userService.get(targetUserId);
+                    const user = await userService.get(targetUserId);
                     if (user) {
                         // Create a completed deposit record
-                        db.prepare(`
+                        await db.query(`
                             INSERT INTO deposits (user_id, amount, payment_code, status, completed_at)
-                            VALUES (?, ?, ?, 'completed', CURRENT_TIMESTAMP)
-                        `).run(targetUserId, amount, paymentCode);
+                            VALUES ($1, $2, $3, 'completed', NOW())
+                        `, [targetUserId, amount, paymentCode]);
 
                         // Add balance
-                        userService.addBalance(targetUserId, amount);
-                        const updatedUser = userService.get(targetUserId);
+                        await userService.addBalance(targetUserId, amount);
+                        const updatedUser = await userService.get(targetUserId);
 
                         const formattedPrice = new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
                         const totalBalance = new Intl.NumberFormat('vi-VN').format(updatedUser.balance) + 'đ';
@@ -518,20 +532,20 @@ function startWebhookServer(bot) {
         }
     });
 
-    app.get('/api/public/products', (req, res) => {
+    app.get('/api/public/products', async (req, res) => {
         try {
-            const categories = db.prepare('SELECT id, name, emoji FROM categories ORDER BY sort_order').all();
-            const products = db.prepare(`
+            const categoriesRes = await db.query('SELECT id, name, emoji FROM categories ORDER BY sort_order');
+            const productsRes = await db.query(`
                 SELECT p.id, p.category_id, p.name, p.price, p.emoji, p.description, p.promotion, p.contact_only, p.contact_url, p.deposit_amount
                 FROM products p
                 WHERE p.is_active = 1
                 ORDER BY p.category_id, p.id
-            `).all();
+            `);
 
             res.json({
                 success: true,
-                categories,
-                products,
+                categories: categoriesRes.rows,
+                products: productsRes.rows,
                 botUsername: config.BOT_USERNAME || process.env.BOT_USERNAME || 'carebook_bot',
                 shopName: config.SHOP_NAME || 'CareBook Clinic',
                 supportContact: config.SUPPORT_CONTACT || '@carebook_support'
@@ -545,7 +559,7 @@ function startWebhookServer(bot) {
     // ═══════════════════════════════════════
     // WEB DASHBOARD PAGES
     // ═══════════════════════════════════════
-    app.get('/admin/login', (req, res) => {
+    app.get('/admin/login', async (req, res) => {
         // Handle short-lived SSO token login
         if (req.query.token) {
             const token = req.query.token;
@@ -553,10 +567,9 @@ function startWebhookServer(bot) {
 
             if (tokenData && tokenData.expiresAt > Date.now()) {
                 const sessionId = crypto.randomBytes(16).toString('hex');
-                activeSessions[sessionId] = { 
-                    username: tokenData.username, 
-                    role: tokenData.role 
-                };
+                
+                // Store session to Postgres
+                await db.query('INSERT INTO sessions (session_id, username, role) VALUES ($1, $2, $3)', [sessionId, tokenData.username, tokenData.role]);
 
                 delete activeTempTokens[token];
 
@@ -569,7 +582,7 @@ function startWebhookServer(bot) {
         }
 
         // If already logged in, redirect to dashboard
-        if (isAuthenticated(req)) {
+        if (await isAuthenticated(req)) {
             return res.redirect('/admin/dashboard');
         }
         const filePath = path.join(__dirname, '..', 'public', 'login.html');
@@ -580,7 +593,7 @@ function startWebhookServer(bot) {
         }
     });
 
-    app.post('/admin/login', (req, res) => {
+    app.post('/admin/login', async (req, res) => {
         const { username, password } = req.body;
 
         if (!username || !password) {
@@ -588,17 +601,17 @@ function startWebhookServer(bot) {
         }
 
         try {
-            const user = db.prepare('SELECT * FROM dashboard_users WHERE username = ?').get(username);
+            const userRes = await db.query('SELECT * FROM dashboard_users WHERE username = $1', [username]);
+            const user = userRes.rows[0];
             if (!user || !verifyPassword(password, user.password_hash)) {
                 return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không chính xác.' });
             }
 
             // Create session ID
             const sessionId = crypto.randomBytes(32).toString('hex');
-            activeSessions[sessionId] = {
-                username: user.username,
-                role: user.role
-            };
+            
+            // Store session to Postgres
+            await db.query('INSERT INTO sessions (session_id, username, role) VALUES ($1, $2, $3)', [sessionId, user.username, user.role]);
 
             // Set cookie valid for 30 days
             res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; Max-Age=2592000`);
@@ -609,15 +622,15 @@ function startWebhookServer(bot) {
         }
     });
 
-    app.get('/admin/dashboard', (req, res) => {
-        if (!isAuthenticated(req)) {
+    app.get('/admin/dashboard', async (req, res) => {
+        if (!(await isAuthenticated(req))) {
             return res.redirect('/admin/login');
         }
         
         // Auto sign cookie if token parameter is used
         if (req.query.token && req.query.token === config.DASHBOARD_TOKEN) {
             const sessionId = crypto.randomBytes(32).toString('hex');
-            activeSessions[sessionId] = { username: 'admin', role: 'admin' };
+            await db.query('INSERT INTO sessions (session_id, username, role) VALUES ($1, $2, $3)', [sessionId, 'admin', 'admin']);
             res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; Max-Age=2592000`);
         }
 
@@ -629,11 +642,11 @@ function startWebhookServer(bot) {
         }
     });
 
-    app.get('/admin/logout', (req, res) => {
+    app.get('/admin/logout', async (req, res) => {
         const cookies = parseCookies(req.headers.cookie);
         const sessionId = cookies.session_id;
         if (sessionId) {
-            delete activeSessions[sessionId];
+            await db.query('DELETE FROM sessions WHERE session_id = $1', [sessionId]);
         }
         res.setHeader('Set-Cookie', 'session_id=; Path=/; HttpOnly; Max-Age=0');
         res.redirect('/admin/login');
@@ -644,23 +657,23 @@ function startWebhookServer(bot) {
     // ═══════════════════════════════════════
     
     // 1. Get statistics & clinic dashboard metadata
-    app.get('/admin/api/stats', checkRole(['admin', 'receptionist', 'doctor']), (req, res) => {
+    app.get('/admin/api/stats', checkRole(['admin', 'receptionist', 'doctor']), async (req, res) => {
         try {
-            const stats = appointmentService.getStats();
+            const stats = await appointmentService.getStats();
             
             // Latest 10 appointments
-            const recentAppointments = db.prepare(`
+            const recentRes = await db.query(`
                 SELECT a.id, a.patient_name, a.patient_phone, a.booking_date, a.booking_time, a.deposit_amount, a.status, a.created_at, p.name as package_name
                 FROM appointments a
                 JOIN products p ON a.package_id = p.id
                 ORDER BY a.created_at DESC
                 LIMIT 10
-            `).all();
+            `);
 
             res.json({
                 success: true,
                 stats,
-                recentAppointments,
+                recentAppointments: recentRes.rows,
                 shopName: config.SHOP_NAME,
                 user: req.session
             });
@@ -671,34 +684,34 @@ function startWebhookServer(bot) {
     });
 
     // 2. Read packages / products
-    app.get('/admin/api/products', checkRole(['admin', 'receptionist', 'doctor']), (req, res) => {
+    app.get('/admin/api/products', checkRole(['admin', 'receptionist', 'doctor']), async (req, res) => {
         try {
-            const categories = db.prepare('SELECT * FROM categories ORDER BY sort_order').all();
-            const products = db.prepare(`
+            const categoriesRes = await db.query('SELECT * FROM categories ORDER BY sort_order');
+            const productsRes = await db.query(`
                 SELECT p.*, c.name as category_name, c.emoji as category_emoji
                 FROM products p
                 JOIN categories c ON p.category_id = c.id
                 ORDER BY p.category_id, p.id
-            `).all();
-            res.json({ success: true, categories, products });
+            `);
+            res.json({ success: true, categories: categoriesRes.rows, products: productsRes.rows });
         } catch (err) {
             console.error('API Products Error:', err.message);
             res.status(500).json({ error: 'Internal Server Error' });
         }
     });
 
-    // 3. Edit clinical package details (only admin can change pricing/deposits)
-    app.post('/admin/api/products/edit', checkRole(['admin']), (req, res) => {
+    // 3. Edit clinical package details
+    app.post('/admin/api/products/edit', checkRole(['admin']), async (req, res) => {
         try {
             const { id, category_id, name, price, deposit_amount, emoji, promotion, description, is_active } = req.body;
             if (!id || !category_id || !name || !price) {
                 return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
             }
-            db.prepare(`
+            await db.query(`
                 UPDATE products 
-                SET category_id = ?, name = ?, price = ?, deposit_amount = ?, is_active = ?, emoji = ?, promotion = ?, description = ?
-                WHERE id = ?
-            `).run(
+                SET category_id = $1, name = $2, price = $3, deposit_amount = $4, is_active = $5, emoji = $6, promotion = $7, description = $8
+                WHERE id = $9
+            `, [
                 parseInt(category_id),
                 name.trim(),
                 parseInt(price),
@@ -708,7 +721,7 @@ function startWebhookServer(bot) {
                 promotion || null,
                 description || null,
                 parseInt(id)
-            );
+            ]);
             res.json({ success: true });
         } catch (err) {
             console.error('API Edit Product Error:', err.message);
@@ -717,16 +730,17 @@ function startWebhookServer(bot) {
     });
 
     // 4. Create package
-    app.post('/admin/api/products/add', checkRole(['admin']), (req, res) => {
+    app.post('/admin/api/products/add', checkRole(['admin']), async (req, res) => {
         try {
             const { category_id, name, price, deposit_amount, emoji, promotion, description } = req.body;
             if (!category_id || !name || !price) {
                 return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
             }
-            const result = db.prepare(`
+            const result = await db.query(`
                 INSERT INTO products (category_id, name, price, deposit_amount, emoji, promotion, description, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-            `).run(
+                VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
+                RETURNING id
+            `, [
                 parseInt(category_id),
                 name.trim(),
                 parseInt(price),
@@ -734,8 +748,8 @@ function startWebhookServer(bot) {
                 emoji || '🩺',
                 promotion || null,
                 description || null
-            );
-            res.json({ success: true, id: result.lastInsertRowid });
+            ]);
+            res.json({ success: true, id: result.rows[0].id });
         } catch (err) {
             console.error('API Add Product Error:', err.message);
             res.status(500).json({ error: 'Không thể thêm sản phẩm' });
@@ -743,12 +757,12 @@ function startWebhookServer(bot) {
     });
 
     // 5. Delete package
-    app.post('/admin/api/products/delete', checkRole(['admin']), (req, res) => {
+    app.post('/admin/api/products/delete', checkRole(['admin']), async (req, res) => {
         try {
             const { id } = req.body;
             if (!id) return res.status(400).json({ error: 'Vui lòng cung cấp ID sản phẩm' });
 
-            db.prepare('DELETE FROM products WHERE id = ?').run(parseInt(id));
+            await db.query('DELETE FROM products WHERE id = $1', [parseInt(id)]);
             res.json({ success: true });
         } catch (err) {
             console.error('API Delete Product Error:', err.message);
@@ -757,29 +771,29 @@ function startWebhookServer(bot) {
     });
 
     // 6. Get Appointments lists (Calendar View API)
-    app.get('/admin/api/appointments', checkRole(['admin', 'receptionist', 'doctor']), (req, res) => {
+    app.get('/admin/api/appointments', checkRole(['admin', 'receptionist', 'doctor']), async (req, res) => {
         try {
-            const rows = db.prepare(`
-                SELECT a.*, CAST(a.user_id AS TEXT) as user_id, p.name as package_name, p.emoji as package_emoji, u.username as telegram_username
+            const rowsRes = await db.query(`
+                SELECT a.*, a.user_id::text as user_id, p.name as package_name, p.emoji as package_emoji, u.username as telegram_username
                 FROM appointments a
                 JOIN products p ON a.package_id = p.id
                 LEFT JOIN users u ON a.user_id = u.telegram_id
                 ORDER BY a.booking_date DESC, a.booking_time ASC
-            `).all();
+            `);
             
-            res.json({ success: true, appointments: rows });
+            res.json({ success: true, appointments: rowsRes.rows });
         } catch (err) {
             console.error('API Appointments Error:', err.message);
             res.status(500).json({ error: 'Internal Server Error' });
         }
     });
 
-    // 7. Check-in client (Admin & Receptionist)
-    app.post('/admin/api/appointments/checkin', checkRole(['admin', 'receptionist']), (req, res) => {
+    // 7. Check-in client
+    app.post('/admin/api/appointments/checkin', checkRole(['admin', 'receptionist']), async (req, res) => {
         const { id } = req.body;
         if (!id) return res.status(400).json({ error: 'Thiếu ID lịch hẹn' });
 
-        const result = appointmentService.checkIn(parseInt(id));
+        const result = await appointmentService.checkIn(parseInt(id));
         if (result.success) {
             res.json({ success: true });
         } else {
@@ -787,13 +801,13 @@ function startWebhookServer(bot) {
         }
     });
 
-    // 8. Cancel appointment & release slot (Admin & Receptionist)
+    // 8. Cancel appointment & release slot
     app.post('/admin/api/appointments/cancel', checkRole(['admin', 'receptionist']), async (req, res) => {
         const { id } = req.body;
         if (!id) return res.status(400).json({ error: 'Thiếu ID lịch hẹn' });
 
         try {
-            const appointment = appointmentService.getById(parseInt(id));
+            const appointment = await appointmentService.getById(parseInt(id));
             if (!appointment) {
                 return res.status(404).json({ error: 'Lịch hẹn không tồn tại' });
             }
@@ -803,8 +817,8 @@ function startWebhookServer(bot) {
                 await calendarService.deleteEvent(appointment.calendar_event_id);
             }
 
-            // Cancel in SQLite
-            appointmentService.cancel(parseInt(id));
+            // Cancel in Postgres
+            await appointmentService.cancel(parseInt(id));
 
             // Notify patient via Telegram
             try {
@@ -827,17 +841,17 @@ function startWebhookServer(bot) {
     });
 
     // 9. Staff Account list (Admin only)
-    app.get('/admin/api/staff/list', checkRole(['admin']), (req, res) => {
+    app.get('/admin/api/staff/list', checkRole(['admin']), async (req, res) => {
         try {
-            const staff = db.prepare('SELECT id, username, role, created_at FROM dashboard_users ORDER BY id').all();
-            res.json({ success: true, staff });
+            const staffRes = await db.query('SELECT id, username, role, created_at FROM dashboard_users ORDER BY id');
+            res.json({ success: true, staff: staffRes.rows });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
 
     // 10. Staff account creation and password resets (Admin only)
-    app.post('/admin/api/staff/manage', checkRole(['admin']), (req, res) => {
+    app.post('/admin/api/staff/manage', checkRole(['admin']), async (req, res) => {
         const { action, username, password, role } = req.body;
 
         if (!action || !username) {
@@ -851,14 +865,13 @@ function startWebhookServer(bot) {
                 }
 
                 // Check username exists
-                const existing = db.prepare('SELECT id FROM dashboard_users WHERE username = ?').get(username);
-                if (existing) {
+                const existingRes = await db.query('SELECT id FROM dashboard_users WHERE username = $1', [username]);
+                if (existingRes.rows.length > 0) {
                     return res.status(400).json({ error: 'Tên đăng nhập đã tồn tại.' });
                 }
 
                 const hash = hashPassword(password);
-                db.prepare('INSERT INTO dashboard_users (username, password_hash, role) VALUES (?, ?, ?)')
-                  .run(username.trim().toLowerCase(), hash, role);
+                await db.query('INSERT INTO dashboard_users (username, password_hash, role) VALUES ($1, $2, $3)', [username.trim().toLowerCase(), hash, role]);
                 
                 return res.json({ success: true, message: `Đã tạo thành công tài khoản nhân viên ${username}` });
             }
@@ -869,10 +882,9 @@ function startWebhookServer(bot) {
                 }
 
                 const hash = hashPassword(password);
-                const result = db.prepare('UPDATE dashboard_users SET password_hash = ? WHERE username = ?')
-                                 .run(hash, username);
+                const result = await db.query('UPDATE dashboard_users SET password_hash = $1 WHERE username = $2', [hash, username]);
 
-                if (result.changes === 0) {
+                if (result.rowCount === 0) {
                     return res.status(404).json({ error: 'Không tìm thấy tài khoản nhân viên.' });
                 }
 
@@ -884,8 +896,8 @@ function startWebhookServer(bot) {
                     return res.status(400).json({ error: 'Không thể xóa tài khoản Admin tối cao.' });
                 }
 
-                const result = db.prepare('DELETE FROM dashboard_users WHERE username = ?').run(username);
-                if (result.changes === 0) {
+                const result = await db.query('DELETE FROM dashboard_users WHERE username = $1', [username]);
+                if (result.rowCount === 0) {
                     return res.status(404).json({ error: 'Không tìm thấy nhân viên.' });
                 }
 
@@ -903,7 +915,6 @@ function startWebhookServer(bot) {
     // ZALO CHATBOT WEBHOOK
     // ═══════════════════════════════════════
     app.post('/webhook/zalo', async (req, res) => {
-        // Kiểm tra Secret Token nếu được cấu hình
         if (config.ZALO_BOT_SECRET_TOKEN) {
             const secretHeader = req.headers['x-bot-api-secret-token'];
             if (secretHeader !== config.ZALO_BOT_SECRET_TOKEN) {
@@ -915,14 +926,10 @@ function startWebhookServer(bot) {
         const update = req.body;
         console.log('📬 Nhận Webhook Update từ Zalo Bot:', JSON.stringify(update));
 
-        // Phản hồi OK ngay lập tức cho Zalo (trong vòng 2s để tránh timeout)
-        res.status(200).json({ ok: true });
-
-        // Xử lý tin nhắn bất đồng bộ
+        // Process message
         try {
-            if (!update) return;
+            if (!update) return res.status(200).json({ ok: true });
 
-            // 1. Trích xuất Chat ID (hoặc Sender ID của Zalo)
             let chatId = null;
             if (update.message && update.message.chat && update.message.chat.id) {
                 chatId = String(update.message.chat.id);
@@ -930,9 +937,8 @@ function startWebhookServer(bot) {
                 chatId = String(update.sender.id);
             }
 
-            if (!chatId) return;
+            if (!chatId) return res.status(200).json({ ok: true });
 
-            // 2. Trích xuất nội dung tin nhắn hoặc số điện thoại danh bạ/danh thiếp
             let text = null;
             if (update.message) {
                 if (update.message.text) {
@@ -940,7 +946,6 @@ function startWebhookServer(bot) {
                 } else if (update.message.contact && update.message.contact.phone_number) {
                     text = update.message.contact.phone_number;
                 } else if (update.message.attachments && Array.isArray(update.message.attachments)) {
-                    // Trích xuất số điện thoại từ đính kèm danh thiếp (business_card)
                     const card = update.message.attachments.find(a => a.type === 'business_card');
                     if (card && card.payload && card.payload.phone) {
                         text = card.payload.phone;
@@ -948,7 +953,6 @@ function startWebhookServer(bot) {
                 }
             }
 
-            // Hỗ trợ bổ sung định dạng Zalo OA event raw (không qua adapter)
             if (!text && update.event_name === 'user_send_business_card' && update.message && update.message.attachments) {
                 const card = update.message.attachments.find(a => a.type === 'business_card');
                 if (card && card.payload && card.payload.phone) {
@@ -968,6 +972,8 @@ function startWebhookServer(bot) {
         } catch (err) {
             console.error('❌ Lỗi xử lý Webhook Zalo:', err.message);
         }
+
+        res.status(200).json({ ok: true });
     });
 
     const port = (config.WEBHOOK_PORT !== undefined && config.WEBHOOK_PORT !== null && config.WEBHOOK_PORT !== '') ? config.WEBHOOK_PORT : 3000;

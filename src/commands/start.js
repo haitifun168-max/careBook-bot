@@ -10,7 +10,7 @@ module.exports = (bot) => {
         const log = (msg) => fs.appendFileSync(debugLogPath, `[Start Command] ${msg}\n`);
         log(`Executing start handler for user ${ctx.from.id}...`);
         try {
-            const user = userService.findOrCreate(ctx.from);
+            const user = await userService.findOrCreate(ctx.from);
             log(`User found/created: ${user.full_name}`);
             await ctx.replyWithHTML(messages.welcome(user.full_name), mainMenuKeyboard());
             log('Reply sent successfully.');

@@ -8,25 +8,24 @@ const config = require('../config');
 const napSessions = {};
 
 module.exports = (bot) => {
-    const executeNap = (ctx, amount) => {
+    const executeNap = async (ctx, amount) => {
         if (amount < 10000) {
             return ctx.reply('❌ Số tiền tối thiểu là 10.000đ');
         }
 
         // Ensure user exists in database
-        userService.findOrCreate(ctx.from);
+        await userService.findOrCreate(ctx.from);
 
         const payment = paymentService.generatePayment(amount);
 
         // Record deposit request in database
-        db.prepare('INSERT INTO deposits (user_id, amount, payment_code) VALUES (?, ?, ?)')
-          .run(String(ctx.from.id), amount, payment.paymentCode);
+        await db.query('INSERT INTO deposits (user_id, amount, payment_code) VALUES ($1, $2, $3)', [String(ctx.from.id), amount, payment.paymentCode]);
 
         const cleanPrefix = (config.PAYMENT_PREFIX || 'CB').replace(/[-\s]/g, '');
         const staticCode = `${cleanPrefix}${paymentService.encryptUserId(ctx.from.id)}`;
 
         // Send QR image
-        ctx.replyWithPhoto(payment.qrUrl, {
+        await ctx.replyWithPhoto(payment.qrUrl, {
             caption:
                 `💰 <b>NẠP SỐ DƯ VÍ TÍCH ĐIỂM</b>\n\n` +
                 `Quét mã QR để nạp ${formatPrice(amount)} vào tài khoản.\n\n` +
@@ -37,10 +36,10 @@ module.exports = (bot) => {
                 `💡 <i>Mẹo: Bạn cũng có thể chuyển khoản tự do với cú pháp tĩnh bất kỳ lúc nào (không cần gõ lệnh nạp):</i>\n` +
                 `🔑 Nội dung CK tĩnh: <code>${staticCode}</code>`,
             parse_mode: 'HTML',
-        });
+        }).catch(() => {});
     };
 
-    const handleNap = (ctx, amountStr) => {
+    const handleNap = async (ctx, amountStr) => {
         if (!amountStr) {
             // Set session state to wait for amount input
             napSessions[ctx.from.id] = { state: 'WAITING_AMOUNT' };
@@ -48,7 +47,7 @@ module.exports = (bot) => {
                 '💰 <b>NẠP SỐ DƯ VÍ TÍCH ĐIỂM</b>\n\n' +
                 'Vui lòng nhập số tiền bạn muốn nạp (tối thiểu 10.000đ):\n' +
                 '<i>Ví dụ: 50000</i>'
-            );
+            ).catch(() => {});
         }
 
         if (isNaN(amountStr)) {
@@ -56,19 +55,19 @@ module.exports = (bot) => {
                 '❌ Số tiền không hợp lệ.\n' +
                 'Cách dùng: /nap [số tiền]\n' +
                 'Ví dụ: /nap 50000'
-            );
+            ).catch(() => {});
         }
 
-        executeNap(ctx, parseInt(amountStr));
+        await executeNap(ctx, parseInt(amountStr));
     };
 
-    bot.command('nap', (ctx) => {
+    bot.command('nap', async (ctx) => {
         const text = ctx.message.text.split(' ');
-        handleNap(ctx, text[1]);
+        await handleNap(ctx, text[1]);
     });
 
-    bot.hears('💰 Nạp tiền', (ctx) => {
-        handleNap(ctx, null);
+    bot.hears('💰 Nạp tiền', async (ctx) => {
+        await handleNap(ctx, null);
     });
 
     // Handle text input for WAITING_AMOUNT state
@@ -92,7 +91,8 @@ module.exports = (bot) => {
             const amount = parseInt(text);
             delete napSessions[userId]; // clear session
             
-            return executeNap(ctx, amount);
+            await executeNap(ctx, amount);
+            return;
         }
 
         return next();

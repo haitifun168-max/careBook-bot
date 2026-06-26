@@ -2,15 +2,21 @@ const test = require('node:test');
 const assert = require('node:assert');
 const db = require('../src/database');
 
-test('Database - Check SQLite connection and schema integrity', () => {
+test('Database - Check PostgreSQL connection and schema integrity', async () => {
+    // Wait for database initialization
+    await db.initPromise;
     // Verify database can perform simple query
-    const result = db.prepare("SELECT 1 + 1 as val").get();
-    assert.strictEqual(result.val, 2);
+    const result = await db.query("SELECT 1 + 1 as val");
+    assert.strictEqual(parseInt(result.rows[0].val), 2);
 
     // Verify vital tables exist
-    const tables = ['users', 'categories', 'products', 'appointments', 'clinic_hours', 'dashboard_users', 'deposits'];
-    tables.forEach(table => {
-        const info = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);
-        assert.ok(info, `Table '${table}' should exist in database schema`);
-    });
+    const tables = ['users', 'categories', 'products', 'appointments', 'clinic_hours', 'dashboard_users', 'deposits', 'sessions'];
+    for (const table of tables) {
+        const info = await db.query(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1",
+            [table]
+        );
+        assert.ok(info.rows.length > 0, `Table '${table}' should exist in database schema`);
+    }
+    await db.end();
 });

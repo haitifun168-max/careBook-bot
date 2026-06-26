@@ -4,40 +4,43 @@ const userService = {
     /**
      * Find or create user
      */
-    findOrCreate(telegramUser) {
+    async findOrCreate(telegramUser) {
         const userIdStr = String(telegramUser.id);
-        const existing = db.prepare('SELECT *, CAST(telegram_id AS TEXT) as telegram_id FROM users WHERE telegram_id = ?').get(userIdStr);
-        if (existing) return existing;
+        const existingRes = await db.query('SELECT * FROM users WHERE telegram_id = $1', [userIdStr]);
+        if (existingRes.rows.length > 0) return existingRes.rows[0];
 
         const fullName = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(' ');
-        db.prepare(
-            'INSERT INTO users (telegram_id, username, full_name) VALUES (?, ?, ?)'
-        ).run(userIdStr, telegramUser.username || null, fullName);
+        await db.query(
+            'INSERT INTO users (telegram_id, username, full_name) VALUES ($1, $2, $3) ON CONFLICT (telegram_id) DO NOTHING',
+            [userIdStr, telegramUser.username || null, fullName]
+        );
 
-        return db.prepare('SELECT *, CAST(telegram_id AS TEXT) as telegram_id FROM users WHERE telegram_id = ?').get(userIdStr);
+        const finalRes = await db.query('SELECT * FROM users WHERE telegram_id = $1', [userIdStr]);
+        return finalRes.rows[0];
     },
 
     /**
      * Get user by telegram ID
      */
-    get(telegramId) {
-        return db.prepare('SELECT *, CAST(telegram_id AS TEXT) as telegram_id FROM users WHERE telegram_id = ?').get(String(telegramId));
+    async get(telegramId) {
+        const res = await db.query('SELECT * FROM users WHERE telegram_id = $1', [String(telegramId)]);
+        return res.rows[0] || null;
     },
 
     /**
      * Update balance
      */
-    addBalance(telegramId, amount) {
-        db.prepare('UPDATE users SET balance = balance + ? WHERE telegram_id = ?').run(amount, String(telegramId));
+    async addBalance(telegramId, amount) {
+        await db.query('UPDATE users SET balance = balance + $1 WHERE telegram_id = $2', [amount, String(telegramId)]);
     },
 
     /**
      * Deduct balance
      */
-    deductBalance(telegramId, amount) {
-        const user = this.get(telegramId);
+    async deductBalance(telegramId, amount) {
+        const user = await this.get(telegramId);
         if (!user || user.balance < amount) return false;
-        db.prepare('UPDATE users SET balance = balance - ? WHERE telegram_id = ?').run(amount, String(telegramId));
+        await db.query('UPDATE users SET balance = balance - $1 WHERE telegram_id = $2', [amount, String(telegramId)]);
         return true;
     },
 };

@@ -13,6 +13,17 @@ if (!fs.existsSync(configDir)) {
   fs.mkdirSync(configDir, { recursive: true });
 }
 
+// Restore credentials.json dynamically from environment variables (useful for Render deployment)
+if (process.env.GOOGLE_CREDENTIALS && !fs.existsSync(CREDENTIALS_PATH)) {
+  try {
+    const parsed = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    fs.writeFileSync(CREDENTIALS_PATH, JSON.stringify(parsed, null, 2));
+    console.log('📝 Đã khôi phục credentials.json từ biến môi trường GOOGLE_CREDENTIALS.');
+  } catch (err) {
+    console.error('❌ Lỗi khôi phục credentials.json từ GOOGLE_CREDENTIALS:', err.message);
+  }
+}
+
 if (fs.existsSync(CREDENTIALS_PATH)) {
   try {
     const auth = new google.auth.GoogleAuth({

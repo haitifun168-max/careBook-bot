@@ -24,7 +24,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
     const numericUserId = chatId;
     if (numericUserId && fromUser) {
         // Register user if not exists
-        userService.findOrCreate({
+        await userService.findOrCreate({
             id: numericUserId,
             username: fromUser.username || null,
             first_name: fromUser.first_name || '',
@@ -48,7 +48,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
     if (!session || !session.state) {
         if (normalizedText === '1' || normalizedText === 'dat lich' || normalizedText === 'đặt lịch' || normalizedText === 'datlich') {
             // Start booking flow
-            const products = productService.getAll();
+            const products = await productService.getAll();
             if (products.length === 0) {
                 return zaloBotService.sendMessage(chatId, '⚠️ Hiện tại phòng khám chưa có gói dịch vụ nào hoạt động.');
             }
@@ -78,7 +78,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
         }
 
         if (normalizedText === '2' || normalizedText === 'thong tin' || normalizedText === 'thông tin' || normalizedText === 'thongtin' || normalizedText === '/menu') {
-            const user = userService.get(numericUserId);
+            const user = await userService.get(numericUserId);
             const name = fromUser ? `${fromUser.first_name || ''} ${fromUser.last_name || ''}`.trim() : 'Khách hàng Zalo';
             const userMsg = 
                 `👤 <b>THÔNG TIN BỆNH NHÂN ZALO</b>\n\n` +
@@ -91,7 +91,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
         }
 
         if (normalizedText === '3' || normalizedText === 'dich vu' || normalizedText === 'dịch vụ' || normalizedText === 'dichvu' || normalizedText === '/product') {
-            const products = productService.getAll();
+            const products = await productService.getAll();
             let menuMsg = '🩺 <b>DANH SÁCH DỊCH VỤ & GÓI KHÁM</b>\n\n';
             products.forEach((prod) => {
                 menuMsg += `${prod.emoji || '🩺'} <b>${prod.name}</b> - <b>${formatPrice(prod.price)}</b>\n`;
@@ -104,7 +104,7 @@ async function handleZaloMessage(chatId, text, fromUser) {
         }
 
         if (normalizedText === '4' || normalizedText === 'nap tien' || normalizedText === 'nạp tiền' || normalizedText === 'naptien' || normalizedText === '/nap') {
-            const user = userService.get(numericUserId);
+            const user = await userService.get(numericUserId);
             const userZaloId = chatId;
 
             // Generate a sample payment code for deposit instructions matching Telegram's deposit codes
@@ -136,14 +136,15 @@ async function handleZaloMessage(chatId, text, fromUser) {
 
         if (normalizedText === '5' || normalizedText === 'lich hen' || normalizedText === 'lịch hẹn' || normalizedText === 'lichhen' || normalizedText === '/checkpay') {
             try {
-                const appts = db.prepare(`
+                const res = await db.query(`
                     SELECT a.*, p.name as package_name 
                     FROM appointments a 
                     JOIN products p ON a.package_id = p.id 
-                    WHERE a.user_id = ? 
+                    WHERE a.user_id = $1 
                     ORDER BY a.created_at DESC 
                     LIMIT 5
-                `).all(numericUserId);
+                `, [String(numericUserId)]);
+                const appts = res.rows;
 
                 if (appts.length === 0) {
                     return zaloBotService.sendMessage(chatId, '🔍 Bạn chưa có lịch hẹn khám nào được đăng ký trên hệ thống.');
@@ -256,8 +257,8 @@ async function handleZaloMessage(chatId, text, fromUser) {
         session.state = 'SELECT_TIME';
 
         // Fetch slots & counts
-        const clinicHours = appointmentService.getClinicHours();
-        const occupiedCounts = appointmentService.getOccupiedSlotCounts(selectedDate);
+        const clinicHours = await appointmentService.getClinicHours();
+        const occupiedCounts = await appointmentService.getOccupiedSlotCounts(selectedDate);
         const availableSlots = [];
 
         let slotMsg = `📅 Ngày chọn: <b>${selectedDate}</b>\n\n⏱️ <b>CHỌN KHUNG GIỜ KHÁM TRỐNG:</b>\n`;
@@ -368,8 +369,8 @@ async function handleZaloMessage(chatId, text, fromUser) {
         session.state = 'CONFIRM_BOOKING';
 
         // Prepare confirmation details
-        const product = productService.getById(session.productId);
-        const user = userService.get(numericUserId);
+        const product = await productService.getById(session.productId);
+        const user = await userService.get(numericUserId);
         const balance = user ? user.balance : 0;
         const hasEnoughBalance = balance >= product.deposit_amount;
 
@@ -400,33 +401,36 @@ async function handleZaloMessage(chatId, text, fromUser) {
 
     // State 7: CONFIRM_BOOKING
     if (session.state === 'CONFIRM_BOOKING') {
-        const product = productService.getById(session.productId);
+        const product = await productService.getById(session.productId);
 
         if (cleanText === '1') {
             // QR Payment method selected
             const paymentCode = paymentService.generatePaymentCode();
             const qrUrl = paymentService.generateQRUrl(product.deposit_amount, paymentCode);
 
-            // Double check slot availability
-            const hour = appointmentService.getClinicHourById(session.hourId);
-            const available = appointmentService.isSlotAvailable(session.dateStr, session.timeLabel, hour.max_capacity);
-            if (!available) {
-                delete zaloSessions[chatId];
-                return zaloBotService.sendMessage(chatId, '❌ Rất tiếc, khung giờ này vừa mới bị đặt hết chỗ. Vui lòng gõ "start" để thử lại.');
+            // Create appointment in database (pending state) using transactional createSafe
+            let appointmentId;
+            try {
+                appointmentId = await appointmentService.createSafe({
+                    userId: numericUserId,
+                    packageId: session.productId,
+                    patientName: session.patientName,
+                    patientPhone: session.patientPhone,
+                    bookingDate: session.dateStr,
+                    bookingTime: session.timeLabel,
+                    totalPrice: product.price,
+                    depositAmount: product.deposit_amount,
+                    paymentCode
+                });
+            } catch (err) {
+                if (err.message === 'SLOT_FULL') {
+                    delete zaloSessions[chatId];
+                    return zaloBotService.sendMessage(chatId, '❌ Rất tiếc, khung giờ này vừa mới bị đặt hết chỗ. Vui lòng gõ "start" để thử lại.');
+                }
+                throw err;
             }
 
-            // Create appointment in database (pending state)
-            const appointment = appointmentService.create({
-                userId: numericUserId,
-                packageId: session.productId,
-                patientName: session.patientName,
-                patientPhone: session.patientPhone,
-                bookingDate: session.dateStr,
-                bookingTime: session.timeLabel,
-                totalPrice: product.price,
-                depositAmount: product.deposit_amount,
-                paymentCode
-            });
+            const appointment = await appointmentService.getById(appointmentId);
 
             // Send instructions
             const payInstructions = 
@@ -461,15 +465,18 @@ async function handleZaloMessage(chatId, text, fromUser) {
                 `💵 Tiền cọc: <b>${formatPrice(product.deposit_amount)}</b>\n` +
                 `🔑 Mã nội dung: <code>${paymentCode}</code>\n\n` +
                 `⏱️ <i>Lịch giữ chỗ sẽ tự động hủy sau 15 phút nếu khách chưa chuyển khoản cọc.</i>`;
-            db.prepare('SELECT telegram_id FROM users WHERE telegram_id = ?').get(String(config.ADMIN_ID)) && 
+            
+            const adminExistsRes = await db.query('SELECT telegram_id FROM users WHERE telegram_id = $1', [String(config.ADMIN_ID)]);
+            if (adminExistsRes.rows.length > 0) {
                 zaloBotService.sendMessage(String(config.ADMIN_ID), adminMsg, 'html').catch(() => {});
+            }
 
             // 15-Minute Expiration Timer for Zalo
             const timer = setTimeout(async () => {
                 try {
-                    const freshAppt = appointmentService.getById(appointment.id);
+                    const freshAppt = await appointmentService.getById(appointment.id);
                     if (freshAppt && freshAppt.status === 'pending') {
-                        appointmentService.cancel(appointment.id);
+                        await appointmentService.cancel(appointment.id);
                         
                         // Alert customer via Zalo
                         await zaloBotService.sendMessage(
@@ -499,32 +506,35 @@ async function handleZaloMessage(chatId, text, fromUser) {
             return;
         } else if (cleanText === '2' && session.hasEnoughBalance) {
             // Wallet Payment method selected
-            const hour = appointmentService.getClinicHourById(session.hourId);
-            const available = appointmentService.isSlotAvailable(session.dateStr, session.timeLabel, hour.max_capacity);
-            
-            if (!available) {
-                delete zaloSessions[chatId];
-                return zaloBotService.sendMessage(chatId, '❌ Rất tiếc, khung giờ này vừa mới bị đặt hết chỗ. Vui lòng gõ "start" để thử lại.');
+            const paymentCode = paymentService.generatePaymentCode('WALLET');
+
+            // Create appointment in database (already confirmed!) using transactional createSafe
+            let appointmentId;
+            try {
+                appointmentId = await appointmentService.createSafe({
+                    userId: numericUserId,
+                    packageId: session.productId,
+                    patientName: session.patientName,
+                    patientPhone: session.patientPhone,
+                    bookingDate: session.dateStr,
+                    bookingTime: session.timeLabel,
+                    totalPrice: product.price,
+                    depositAmount: product.deposit_amount,
+                    paymentCode
+                });
+            } catch (err) {
+                if (err.message === 'SLOT_FULL') {
+                    delete zaloSessions[chatId];
+                    return zaloBotService.sendMessage(chatId, '❌ Rất tiếc, khung giờ này vừa mới bị đặt hết chỗ. Vui lòng gõ "start" để thử lại.');
+                }
+                throw err;
             }
 
             // Deduct balance
-            userService.deductBalance(numericUserId, product.deposit_amount);
+            await userService.deductBalance(numericUserId, product.deposit_amount);
 
-            // Generate unique wallet payment code
-            const paymentCode = paymentService.generatePaymentCode('WALLET');
-
-            // Create appointment in database (already confirmed!)
-            const appointment = appointmentService.create({
-                userId: numericUserId,
-                packageId: session.productId,
-                patientName: session.patientName,
-                patientPhone: session.patientPhone,
-                bookingDate: session.dateStr,
-                bookingTime: session.timeLabel,
-                totalPrice: product.price,
-                depositAmount: product.deposit_amount,
-                paymentCode
-            });
+            // Fetch created appointment
+            const appointment = await appointmentService.getById(appointmentId);
 
             // Sync to Google Calendar
             let calendarEventId = null;
@@ -533,12 +543,13 @@ async function handleZaloMessage(chatId, text, fromUser) {
                 calendarEventId = syncResult.eventId;
             }
 
-            // Confirm payment & sync in SQLite
-            appointmentService.confirmPayment(appointment.id, calendarEventId);
-            const confirmedAppt = appointmentService.getById(appointment.id);
+            // Confirm payment & sync
+            await appointmentService.confirmPayment(appointment.id, calendarEventId);
+            const confirmedAppt = await appointmentService.getById(appointment.id);
 
             // Reply success
             const successMsg = 
+                `` +
                 `✅ <b>ĐẶT LỊCH KHÁM THÀNH CÔNG!</b>\n\n` +
                 `Lịch hẹn của bạn đã được xác nhận thanh toán cọc bằng số dư ví:\n\n` +
                 `• Mã lịch khám: <b>#${confirmedAppt.id}</b>\n` +

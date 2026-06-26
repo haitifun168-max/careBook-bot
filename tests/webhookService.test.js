@@ -37,9 +37,12 @@ test.describe('WebhookService and Express API Tests', () => {
     };
 
     test.before(async () => {
+        // Wait for database initialization
+        await db.initPromise;
         // Prepare test database records
-        userService.findOrCreate(testUser);
-        product = db.prepare('SELECT * FROM products LIMIT 1').get();
+        await userService.findOrCreate(testUser);
+        const prodRes = await db.query('SELECT * FROM products LIMIT 1');
+        product = prodRes.rows[0];
         assert.ok(product, 'Must have a seeded product');
 
         // Configure test server port and auth key
@@ -62,23 +65,28 @@ test.describe('WebhookService and Express API Tests', () => {
         baseUrl = `http://localhost:${port}`;
     });
 
-    test.beforeEach(() => {
+    test.beforeEach(async () => {
         // Clear collections and DB records for our test user
-        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(String(testUser.id));
-        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(String(testUser.id));
-        db.prepare("DELETE FROM deposits WHERE payment_code IN ('CB-3BJMSZ5PVOJW4', 'CB-U9HBDMOJV9ZZ', 'CB3BJMSZ5PVOJW4', 'CBU9HBDMOJV9ZZ')").run();
-        db.prepare("DELETE FROM deposits WHERE user_id = '530718471553674179'").run();
-        db.prepare("DELETE FROM users WHERE telegram_id = '530718471553674179'").run();
-        db.prepare('UPDATE users SET balance = 0 WHERE telegram_id = ?').run(String(testUser.id));
+        await db.query('DELETE FROM appointments WHERE user_id = $1', [String(testUser.id)]);
+        await db.query('DELETE FROM deposits WHERE user_id = $1', [String(testUser.id)]);
+        await db.query("DELETE FROM deposits WHERE payment_code IN ('CB-3BJMSZ5PVOJW4', 'CB-U9HBDMOJV9ZZ', 'CB3BJMSZ5PVOJW4', 'CBU9HBDMOJV9ZZ')");
+        await db.query("DELETE FROM deposits WHERE user_id = '530718471553674179'");
+        await db.query("DELETE FROM users WHERE telegram_id = '530718471553674179'");
+        await db.query('UPDATE users SET balance = 0 WHERE telegram_id = $1', [String(testUser.id)]);
+        await db.query('DELETE FROM sessions');
         sentTelegramMessages.length = 0;
     });
 
     test.after(async () => {
         // Clean up test user & appointments from DB
-        db.prepare('DELETE FROM appointments WHERE user_id = ?').run(String(testUser.id));
-        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(String(testUser.id));
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(String(testUser.id));
+        await db.query('DELETE FROM appointments WHERE user_id = $1', [String(testUser.id)]);
+        await db.query('DELETE FROM deposits WHERE user_id = $1', [String(testUser.id)]);
+        await db.query('DELETE FROM users WHERE telegram_id = $1', [String(testUser.id)]);
+        await db.query('DELETE FROM sessions');
         
+        // Close DB pool
+        await db.end();
+
         // Stop server
         if (server) {
             await new Promise((resolve) => server.close(resolve));
@@ -128,7 +136,7 @@ test.describe('WebhookService and Express API Tests', () => {
 
     test('POST /webhook/sepay - confirms pending appointment', async () => {
         const paymentCode = 'NAP PAY-TEST1A';
-        const apt = appointmentService.create({
+        const apt = await appointmentService.create({
             userId: testUser.id,
             packageId: product.id,
             patientName: 'Test Confirm Patient',
@@ -157,7 +165,7 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.strictEqual(data.success, true);
 
         // Check DB state
-        const updatedApt = appointmentService.getById(apt.id);
+        const updatedApt = await appointmentService.getById(apt.id);
         assert.strictEqual(updatedApt.status, 'confirmed');
         assert.strictEqual(updatedApt.calendar_event_id, 'mock-event-id-999');
 
@@ -167,7 +175,7 @@ test.describe('WebhookService and Express API Tests', () => {
 
     test('POST /webhook/sepay - late payment / cancelled slot available: restores appointment', async () => {
         const paymentCode = 'NAP PAY-TEST2B';
-        const apt = appointmentService.create({
+        const apt = await appointmentService.create({
             userId: testUser.id,
             packageId: product.id,
             patientName: 'Test Restore Patient',
@@ -180,8 +188,8 @@ test.describe('WebhookService and Express API Tests', () => {
         });
 
         // Cancel it to simulate late cọc
-        appointmentService.cancel(apt.id);
-        const checkCancelled = appointmentService.getById(apt.id);
+        await appointmentService.cancel(apt.id);
+        const checkCancelled = await appointmentService.getById(apt.id);
         assert.strictEqual(checkCancelled.status, 'cancelled');
 
         const res = await fetch(`${baseUrl}/webhook/sepay`, {
@@ -202,7 +210,7 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.strictEqual(data.message, `Appointment #${apt.id} recovered`);
 
         // Check restored
-        const updatedApt = appointmentService.getById(apt.id);
+        const updatedApt = await appointmentService.getById(apt.id);
         assert.strictEqual(updatedApt.status, 'confirmed');
 
         // Check notification mentions restoration
@@ -216,10 +224,10 @@ test.describe('WebhookService and Express API Tests', () => {
         const maxCapacity = 1;
 
         // Ensure max capacity is 1 in DB for timeLabel
-        db.prepare('UPDATE clinic_hours SET max_capacity = 1 WHERE time_label = ?').run(timeLabel);
+        await db.query('UPDATE clinic_hours SET max_capacity = 1 WHERE time_label = $1', [timeLabel]);
 
         const paymentCode = 'NAP PAY-TEST3C';
-        const aptA = appointmentService.create({
+        const aptA = await appointmentService.create({
             userId: testUser.id,
             packageId: product.id,
             patientName: 'Patient A',
@@ -232,10 +240,10 @@ test.describe('WebhookService and Express API Tests', () => {
         });
 
         // Cancel appointment A (simulating timeout)
-        appointmentService.cancel(aptA.id);
+        await appointmentService.cancel(aptA.id);
 
         // Book slot with Appointment B and confirm it, fully occupying the slot
-        const aptB = appointmentService.create({
+        const aptB = await appointmentService.create({
             userId: testUser.id,
             packageId: product.id,
             patientName: 'Patient B',
@@ -246,10 +254,10 @@ test.describe('WebhookService and Express API Tests', () => {
             depositAmount: product.deposit_amount,
             paymentCode: 'NAP PAY-OTHER'
         });
-        appointmentService.confirmPayment(aptB.id, 'gcal-other');
+        await appointmentService.confirmPayment(aptB.id, 'gcal-other');
 
         // Slot should be full now
-        assert.strictEqual(appointmentService.isSlotAvailable(dateStr, timeLabel, maxCapacity), false);
+        assert.strictEqual(await appointmentService.isSlotAvailable(dateStr, timeLabel, maxCapacity), false);
 
         // Webhook receives payment for cancelled appointment A
         const res = await fetch(`${baseUrl}/webhook/sepay`, {
@@ -270,11 +278,11 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.ok(data.message.includes('refunded to wallet'));
 
         // Appointment A remains cancelled
-        const finalAptA = appointmentService.getById(aptA.id);
+        const finalAptA = await appointmentService.getById(aptA.id);
         assert.strictEqual(finalAptA.status, 'cancelled');
 
         // User wallet should be refunded
-        const user = userService.get(testUser.id);
+        const user = await userService.get(testUser.id);
         assert.strictEqual(user.balance, product.deposit_amount);
 
         // Notification must contain wallet refund info
@@ -287,10 +295,10 @@ test.describe('WebhookService and Express API Tests', () => {
         const depositAmount = 150000;
 
         // Insert pending deposit request
-        db.prepare(`
+        await db.query(`
             INSERT INTO deposits (user_id, amount, payment_code, status)
-            VALUES (?, ?, ?, 'pending')
-        `).run(String(testUser.id), depositAmount, paymentCode);
+            VALUES ($1, $2, $3, 'pending')
+        `, [String(testUser.id), depositAmount, paymentCode]);
 
         // Request SePay Webhook
         const res = await fetch(`${baseUrl}/webhook/sepay`, {
@@ -310,11 +318,12 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.strictEqual(data.success, true);
 
         // Check deposit status in DB
-        const deposit = db.prepare('SELECT * FROM deposits WHERE payment_code = ?').get(paymentCode);
+        const depositRes = await db.query('SELECT * FROM deposits WHERE payment_code = $1', [paymentCode]);
+        const deposit = depositRes.rows[0];
         assert.strictEqual(deposit.status, 'completed');
 
         // Check user balance is credited
-        const user = userService.get(testUser.id);
+        const user = await userService.get(testUser.id);
         assert.strictEqual(user.balance, depositAmount);
     });
 
@@ -356,8 +365,8 @@ test.describe('WebhookService and Express API Tests', () => {
         const dataTelegram = await resTelegram.json();
         assert.strictEqual(dataTelegram.success, true);
 
-        // Check user balance is credited (should be depositAmount since beforeEach reset it to 0)
-        let user = userService.get(testUser.id);
+        // Check user balance is credited
+        let user = await userService.get(testUser.id);
         assert.strictEqual(user.balance, depositAmount);
 
         // 2. Test static Zalo ID deposit (we will register a temporary Zalo user)
@@ -367,7 +376,7 @@ test.describe('WebhookService and Express API Tests', () => {
             first_name: 'Lan',
             last_name: 'Huong'
         };
-        userService.findOrCreate(testZaloUser);
+        await userService.findOrCreate(testZaloUser);
         
         const staticZaloCode = `${cleanPrefix}${paymentService.encryptUserId(testZaloUser.id)}`;
 
@@ -388,7 +397,7 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.strictEqual(dataZalo.success, true);
 
         // Check Zalo user balance is credited
-        const zaloUser = userService.get(testZaloUser.id);
+        const zaloUser = await userService.get(testZaloUser.id);
         assert.strictEqual(zaloUser.balance, depositAmount);
 
         // 3. Test static Zalo Hex ID deposit (we will register a temporary Zalo user with hex ID)
@@ -398,7 +407,7 @@ test.describe('WebhookService and Express API Tests', () => {
             first_name: 'Minh',
             last_name: 'Thanh'
         };
-        userService.findOrCreate(testZaloHexUser);
+        await userService.findOrCreate(testZaloHexUser);
         
         const staticZaloHexCode = `${cleanPrefix}${paymentService.encryptUserId(testZaloHexUser.id)}`;
 
@@ -419,14 +428,14 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.strictEqual(dataZaloHex.success, true);
 
         // Check Zalo hex user balance is credited
-        const zaloHexUser = userService.get(testZaloHexUser.id);
+        const zaloHexUser = await userService.get(testZaloHexUser.id);
         assert.strictEqual(zaloHexUser.balance, depositAmount);
 
         // Clean up test Zalo users
-        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testZaloUser.id);
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testZaloUser.id);
-        db.prepare('DELETE FROM deposits WHERE user_id = ?').run(testZaloHexUser.id);
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(testZaloHexUser.id);
+        await db.query('DELETE FROM deposits WHERE user_id = $1', [testZaloUser.id]);
+        await db.query('DELETE FROM users WHERE telegram_id = $1', [testZaloUser.id]);
+        await db.query('DELETE FROM deposits WHERE user_id = $1', [testZaloHexUser.id]);
+        await db.query('DELETE FROM users WHERE telegram_id = $1', [testZaloHexUser.id]);
     });
 
     test('SSO Login - single use and expiration validation', async () => {
@@ -438,7 +447,6 @@ test.describe('WebhookService and Express API Tests', () => {
         };
 
         // Try to access login using token
-        // Use redirect: 'manual' to intercept the redirection
         let res = await fetch(`${baseUrl}/admin/login?token=${token}`, {
             redirect: 'manual'
         });

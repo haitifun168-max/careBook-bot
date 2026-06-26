@@ -11,6 +11,9 @@ test.describe('Zalo Chatbot Integration Tests', () => {
     let originalFetch;
 
     test.before(async () => {
+        const db = require('../src/database');
+        await db.initPromise;
+
         // Configure test configurations
         config.ZALO_BOT_TOKEN = 'test_zalo_token_123';
         config.ZALO_BOT_SECRET_TOKEN = 'test_zalo_secret_token_123';
@@ -19,7 +22,7 @@ test.describe('Zalo Chatbot Integration Tests', () => {
 
         // Ensure admin user exists in DB
         const userService = require('../src/services/userService');
-        userService.findOrCreate({
+        await userService.findOrCreate({
             id: config.ADMIN_ID,
             username: 'admin_test',
             first_name: 'Admin',
@@ -67,7 +70,10 @@ test.describe('Zalo Chatbot Integration Tests', () => {
 
         // Clean up test admin user from DB
         const db = require('../src/database');
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(String(config.ADMIN_ID));
+        await db.query('DELETE FROM users WHERE telegram_id = $1', [String(config.ADMIN_ID)]);
+
+        // Close DB pool
+        await db.end();
 
         // Stop server
         if (server) {

@@ -3,8 +3,8 @@ const messages = require('../utils/messages');
 const { Markup } = require('telegraf');
 
 module.exports = (bot) => {
-    const handleCheckPay = (ctx) => {
-        const appointments = appointmentService.getRecentByUser(ctx.from.id, 5);
+    const handleCheckPay = async (ctx) => {
+        const appointments = await appointmentService.getRecentByUser(ctx.from.id, 5);
 
         if (appointments.length === 0) {
             return ctx.reply('📋 Bạn chưa đăng ký lịch khám nào.');
@@ -15,7 +15,7 @@ module.exports = (bot) => {
             text += messages.checkApptStatus(appt) + '\n\n━━━━━━━━━━━━━━━━━\n\n';
         });
 
-        ctx.replyWithHTML(text);
+        await ctx.replyWithHTML(text);
     };
 
     bot.command('checkpay', handleCheckPay);

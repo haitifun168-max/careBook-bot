@@ -49,7 +49,22 @@ module.exports = (bot) => {
     // 1. Initiate booking from product list click (replaces old click behavior)
     bot.action(/^product_(\d+)$/, async (ctx) => {
         const productId = parseInt(ctx.match[1]);
-        const product = productService.getById(productId);
+        const userId = ctx.from.id;
+
+        // Anti-spam slot locking checking
+        const hasPending = await appointmentService.hasPending(userId);
+        if (hasPending) {
+            await ctx.answerCbQuery().catch(() => {});
+            return ctx.replyWithHTML(
+                `❌ <b>BẠN ĐANG CÓ LỊCH HẸN CHỜ THANH TOÁN</b>\n\n` +
+                `Bạn hiện đang có một yêu cầu đặt lịch chưa hoàn tất chuyển khoản đặt cọc.\n` +
+                `Vui lòng thanh toán cọc hoặc hủy lịch hẹn cũ trước khi đăng ký lịch khám mới.\n\n` +
+                `👉 Sử dụng lệnh /checkpay để xem chi tiết lịch hẹn chờ cọc của bạn.`,
+                postBookingKeyboard()
+            );
+        }
+
+        const product = await productService.getById(productId);
 
         if (!product) {
             return ctx.answerCbQuery('❌ Gói dịch vụ không tồn tại');
@@ -73,11 +88,11 @@ module.exports = (bot) => {
         }
 
         // Initialize session
-        const session = getSession(ctx.from.id);
+        const session = getSession(userId);
         session.state = 'SELECT_DATE';
         session.productId = productId;
 
-        ctx.editMessageText(`🩺 <b>Gói dịch vụ: ${product.name}</b>\n\n${messages.productHeader}`, {
+        ctx.editMessageText(`%0A🩺 <b>Gói dịch vụ: ${product.name}</b>\n\n${messages.productHeader}`, {
             parse_mode: 'HTML',
             ...dateSelectionKeyboard(productId)
         }).catch(() => {
@@ -89,7 +104,7 @@ module.exports = (bot) => {
     bot.action(/^date_(\d+)_([\d-]+)$/, async (ctx) => {
         const productId = parseInt(ctx.match[1]);
         const dateStr = ctx.match[2];
-        const product = productService.getById(productId);
+        const product = await productService.getById(productId);
 
         if (!product) {
             return ctx.answerCbQuery('❌ Dịch vụ không tồn tại');
@@ -103,8 +118,8 @@ module.exports = (bot) => {
         session.dateStr = dateStr;
 
         // Fetch slots & counts
-        const clinicHours = appointmentService.getClinicHours();
-        const occupiedCounts = appointmentService.getOccupiedSlotCounts(dateStr);
+        const clinicHours = await appointmentService.getClinicHours();
+        const occupiedCounts = await appointmentService.getOccupiedSlotCounts(dateStr);
 
         ctx.editMessageText(`🩺 Gói: <b>${product.name}</b>\n📅 Ngày khám: <b>${dateStr}</b>\n\n👇 Chọn khung giờ khám trống dưới đây:`, {
             parse_mode: 'HTML',
@@ -135,7 +150,7 @@ module.exports = (bot) => {
         session.hourId = hourId;
         session.state = 'ASK_PATIENT_TYPE';
 
-        const hour = appointmentService.getClinicHourById(hourId);
+        const hour = await appointmentService.getClinicHourById(hourId);
         if (!hour) return ctx.reply('❌ Khung giờ không hợp lệ.');
 
         ctx.editMessageText(`📅 Lịch đặt: Ngày <b>${dateStr}</b> lúc <b>${hour.time_label}</b>\n\n❓ Bạn muốn đăng ký đặt lịch khám cho ai?`, {
@@ -178,7 +193,7 @@ module.exports = (bot) => {
     });
 
     // 6. Handle Cancel Booking
-    bot.action('cancel_booking', (ctx) => {
+    bot.action('cancel_booking', async (ctx) => {
         ctx.answerCbQuery('❌ Đã hủy bỏ');
         clearSession(ctx.from.id);
         ctx.editMessageText(messages.bookingCancelled).catch(() => ctx.reply(messages.bookingCancelled));
@@ -193,47 +208,50 @@ module.exports = (bot) => {
             return ctx.answerCbQuery('❌ Phiên đặt lịch không hợp lệ hoặc đã hết hạn.');
         }
 
-        const product = productService.getById(session.productId);
-        const hour = appointmentService.getClinicHourById(session.hourId);
+        const product = await productService.getById(session.productId);
+        const hour = await appointmentService.getClinicHourById(session.hourId);
 
         if (!product || !hour) {
             return ctx.answerCbQuery('❌ Dịch vụ hoặc khung giờ không hợp lệ.');
         }
 
         // Check user balance
-        const user = userService.get(userId);
+        const user = await userService.get(userId);
         if (!user || user.balance < product.deposit_amount) {
             return ctx.answerCbQuery('❌ Số dư ví không đủ để thanh toán cọc.');
         }
 
-        // Double check slot availability
-        const available = appointmentService.isSlotAvailable(session.dateStr, hour.time_label, hour.max_capacity);
-        if (!available) {
-            ctx.answerCbQuery('❌ Khung giờ này vừa mới hết chỗ rảnh.', true);
-            clearSession(userId);
-            return ctx.reply(messages.noSlotsAvailable, postBookingKeyboard());
-        }
-
         ctx.answerCbQuery('⏳ Đang thanh toán bằng ví...');
 
-        // Deduct user balance
-        userService.deductBalance(userId, product.deposit_amount);
-
-        // Generate a unique wallet payment code
+        // Deduct user balance first (if transaction fails, we catch and return error)
         const paymentCode = paymentService.generatePaymentCode('WALLET');
 
-        // Create appointment in database (already confirmed!)
-        const appointment = appointmentService.create({
-            userId,
-            packageId: session.productId,
-            patientName: session.patientName,
-            patientPhone: session.patientPhone,
-            bookingDate: session.dateStr,
-            bookingTime: hour.time_label,
-            totalPrice: product.price,
-            depositAmount: product.deposit_amount,
-            paymentCode
-        });
+        let appointmentId;
+        try {
+            appointmentId = await appointmentService.createSafe({
+                userId,
+                packageId: session.productId,
+                patientName: session.patientName,
+                patientPhone: session.patientPhone,
+                bookingDate: session.dateStr,
+                bookingTime: hour.time_label,
+                totalPrice: product.price,
+                depositAmount: product.deposit_amount,
+                paymentCode
+            });
+        } catch (err) {
+            if (err.message === 'SLOT_FULL') {
+                clearSession(userId);
+                return ctx.reply(messages.noSlotsAvailable, postBookingKeyboard());
+            }
+            throw err;
+        }
+
+        // Deduct user balance
+        await userService.deductBalance(userId, product.deposit_amount);
+
+        // Fetch newly created appointment
+        const appointment = await appointmentService.getById(appointmentId);
 
         // Sync to Google Calendar
         let calendarEventId = null;
@@ -243,8 +261,8 @@ module.exports = (bot) => {
         }
 
         // Update appointment status to confirmed
-        appointmentService.confirmPayment(appointment.id, calendarEventId);
-        const confirmedAppt = appointmentService.getById(appointment.id);
+        await appointmentService.confirmPayment(appointment.id, calendarEventId);
+        const confirmedAppt = await appointmentService.getById(appointment.id);
 
         // Notify user of success
         await ctx.replyWithHTML(
@@ -278,42 +296,45 @@ module.exports = (bot) => {
             return ctx.answerCbQuery('❌ Phiên đặt lịch không hợp lệ hoặc đã hết hạn.');
         }
 
-        const product = productService.getById(session.productId);
-        const hour = appointmentService.getClinicHourById(session.hourId);
+        const product = await productService.getById(session.productId);
+        const hour = await appointmentService.getClinicHourById(session.hourId);
 
         if (!product || !hour) {
             return ctx.answerCbQuery('❌ Dịch vụ hoặc khung giờ không hợp lệ.');
         }
 
-        // Double check slot availability
-        const available = appointmentService.isSlotAvailable(session.dateStr, hour.time_label, hour.max_capacity);
-        if (!available) {
-            ctx.answerCbQuery('❌ Khung giờ này vừa mới hết chỗ rảnh.', true);
-            clearSession(userId);
-            return ctx.reply(messages.noSlotsAvailable, postBookingKeyboard());
-        }
-
         ctx.answerCbQuery('⏳ Đang tạo lịch hẹn...');
 
         // Register user if not exists
-        userService.findOrCreate(ctx.from);
+        await userService.findOrCreate(ctx.from);
 
         // Generate payment details
         const paymentCode = paymentService.generatePaymentCode();
         const qrUrl = paymentService.generateQRUrl(product.deposit_amount, paymentCode);
 
-        // Create appointment in database
-        const appointment = appointmentService.create({
-            userId,
-            packageId: session.productId,
-            patientName: session.patientName,
-            patientPhone: session.patientPhone,
-            bookingDate: session.dateStr,
-            bookingTime: hour.time_label,
-            totalPrice: product.price,
-            depositAmount: product.deposit_amount,
-            paymentCode
-        });
+        // Create appointment safely in database
+        let appointmentId;
+        try {
+            appointmentId = await appointmentService.createSafe({
+                userId,
+                packageId: session.productId,
+                patientName: session.patientName,
+                patientPhone: session.patientPhone,
+                bookingDate: session.dateStr,
+                bookingTime: hour.time_label,
+                totalPrice: product.price,
+                depositAmount: product.deposit_amount,
+                paymentCode
+            });
+        } catch (err) {
+            if (err.message === 'SLOT_FULL') {
+                clearSession(userId);
+                return ctx.reply(messages.noSlotsAvailable, postBookingKeyboard());
+            }
+            throw err;
+        }
+
+        const appointment = await appointmentService.getById(appointmentId);
 
         // Inform user
         await ctx.replyWithPhoto(qrUrl, {
@@ -344,27 +365,27 @@ module.exports = (bot) => {
         // 8. 15-Minute Expiration Timer
         setTimeout(async () => {
             try {
-                const freshAppt = appointmentService.getById(appointment.id);
+                const freshAppt = await appointmentService.getById(appointmentId);
                 if (freshAppt && freshAppt.status === 'pending') {
-                    appointmentService.cancel(appointment.id);
+                    await appointmentService.cancel(appointmentId);
                     
                     // Alert customer
                     await bot.telegram.sendMessage(
-                        appointment.user_id,
-                        messages.bookingExpired(product.name, appointment.booking_date, appointment.booking_time),
+                        freshAppt.user_id,
+                        messages.bookingExpired(product.name, freshAppt.booking_date, freshAppt.booking_time),
                         { parse_mode: 'HTML' }
                     );
 
                     // Notify Admin about auto-cancellation
                     const adminCancelMsg = 
-                        `❌ <b>LỊCH HẸN TỰ HỦY DO HẾT HẠN CỌC #${appointment.id}</b>\n\n` +
-                        `👤 Bệnh nhân: ${appointment.patient_name}\n` +
-                        `📅 Ngày khám: ${appointment.booking_date} (${appointment.booking_time})\n` +
+                        `❌ <b>LỊCH HẸN TỰ HỦY DO HẾT HẠN CỌC #${appointmentId}</b>\n\n` +
+                        `👤 Bệnh nhân: ${freshAppt.patient_name}\n` +
+                        `📅 Ngày khám: ${freshAppt.booking_date} (${freshAppt.booking_time})\n` +
                         `🩺 Dịch vụ: ${product.name}`;
                     bot.telegram.sendMessage(require('../config').ADMIN_ID, adminCancelMsg, { parse_mode: 'HTML' }).catch(() => {});
                 }
             } catch (err) {
-                console.error(`Error in appointment #${appointment.id} expiration timer:`, err.message);
+                console.error(`Error in appointment #${appointmentId} expiration timer:`, err.message);
             }
         }, 15 * 60 * 1000);
     });
@@ -372,7 +393,7 @@ module.exports = (bot) => {
     // Handle cancel pending appointment by customer
     bot.action(/^cancel_pending_(\d+)$/, async (ctx) => {
         const appointmentId = parseInt(ctx.match[1]);
-        const appointment = appointmentService.getById(appointmentId);
+        const appointment = await appointmentService.getById(appointmentId);
 
         if (!appointment) {
             return ctx.answerCbQuery('❌ Lịch hẹn không tồn tại');
@@ -383,7 +404,7 @@ module.exports = (bot) => {
         }
 
         ctx.answerCbQuery('❌ Đã hủy lịch');
-        appointmentService.cancel(appointmentId);
+        await appointmentService.cancel(appointmentId);
 
         ctx.editMessageText('❌ Bạn đã chủ động hủy yêu cầu đặt lịch hẹn này. Khung giờ đã được giải phóng.', {
             reply_markup: postBookingKeyboard()
@@ -422,7 +443,7 @@ module.exports = (bot) => {
             reply_markup: { remove_keyboard: true }
         });
 
-        showBookingConfirmation(ctx, session);
+        await showBookingConfirmation(ctx, session);
     });
 
     // 10. Handle Text Messages (States: WAITING_PATIENT_NAME, WAITING_PATIENT_PHONE)
@@ -474,26 +495,26 @@ module.exports = (bot) => {
             session.patientPhone = phone;
             session.state = 'CONFIRMATION';
 
-            showBookingConfirmation(ctx, session);
+            await showBookingConfirmation(ctx, session);
         }
     });
 
     /**
      * Show booking confirmation card
      */
-    function showBookingConfirmation(ctx, session) {
-        const product = productService.getById(session.productId);
-        const hour = appointmentService.getClinicHourById(session.hourId);
+    async function showBookingConfirmation(ctx, session) {
+        const product = await productService.getById(session.productId);
+        const hour = await appointmentService.getClinicHourById(session.hourId);
 
         if (!product || !hour) {
             clearSession(ctx.from.id);
             return ctx.reply('❌ Đã xảy ra lỗi trong quá trình chọn dịch vụ. Vui lòng thử lại.');
         }
 
-        const user = userService.get(ctx.from.id);
+        const user = await userService.get(ctx.from.id);
         const hasEnoughBalance = user && user.balance >= product.deposit_amount;
 
-        ctx.replyWithHTML(
+        await ctx.replyWithHTML(
             messages.bookingDetails(
                 product.name,
                 session.patientName,
