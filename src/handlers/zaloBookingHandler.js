@@ -700,9 +700,13 @@ async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
             await appointmentService.confirmPayment(appointment.id, calendarEventId);
             const confirmedAppt = await appointmentService.getById(appointment.id);
 
+            // Generate QR Code Check-in link
+            const baseUrl = config.PUBLIC_URL || 'http://localhost:3000';
+            const checkinLink = `${baseUrl.replace(/\/$/, '')}/admin/checkin?code=${confirmedAppt.payment_code}`;
+            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(checkinLink)}`;
+
             // Reply success
             const successMsg = 
-                `` +
                 `✅ <b>ĐẶT LỊCH KHÁM THÀNH CÔNG!</b>\n\n` +
                 `Lịch hẹn của bạn đã được xác nhận thanh toán cọc bằng số dư ví:\n\n` +
                 `• Mã lịch khám: <b>#${confirmedAppt.id}</b>\n` +
@@ -714,6 +718,15 @@ async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
                 `Phòng khám Hân hạnh được đón tiếp bạn!`;
             
             await zaloBotService.sendMessage(chatId, successMsg, 'html');
+            try {
+                await zaloBotService.sendPhoto(
+                    chatId,
+                    qrCodeUrl,
+                    'Vui lòng đưa mã QR này cho lễ tân để check-in khi đến phòng khám'
+                );
+            } catch (err) {
+                console.error('❌ Lỗi khi gửi ảnh QR check-in qua Zalo:', err.message);
+            }
 
             // Clear session state
             delete zaloSessions[chatId];

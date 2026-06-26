@@ -32,6 +32,10 @@ test.describe('WebhookService and Express API Tests', () => {
             sendMessage: async (chatId, text, options) => {
                 sentTelegramMessages.push({ chatId, text, options });
                 return { message_id: 12345 };
+            },
+            sendPhoto: async (chatId, photo, options) => {
+                sentTelegramMessages.push({ chatId, photo, options });
+                return { message_id: 12346 };
             }
         }
     };
@@ -72,6 +76,8 @@ test.describe('WebhookService and Express API Tests', () => {
         await db.query("DELETE FROM deposits WHERE payment_code IN ('CB-3BJMSZ5PVOJW4', 'CB-U9HBDMOJV9ZZ', 'CB3BJMSZ5PVOJW4', 'CBU9HBDMOJV9ZZ')");
         await db.query("DELETE FROM deposits WHERE user_id = '530718471553674179'");
         await db.query("DELETE FROM users WHERE telegram_id = '530718471553674179'");
+        await db.query("DELETE FROM deposits WHERE user_id = 'f7a6098c9bc5729b2bd4'");
+        await db.query("DELETE FROM users WHERE telegram_id = 'f7a6098c9bc5729b2bd4'");
         await db.query('UPDATE users SET balance = 0 WHERE telegram_id = $1', [String(testUser.id)]);
         await db.query('DELETE FROM sessions');
         sentTelegramMessages.length = 0;

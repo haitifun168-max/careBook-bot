@@ -270,6 +270,21 @@ module.exports = (bot) => {
             postBookingKeyboard()
         );
 
+        // Generate QR Code Check-in link
+        const baseUrl = config.PUBLIC_URL || 'http://localhost:3000';
+        const checkinLink = `${baseUrl.replace(/\/$/, '')}/admin/checkin?code=${confirmedAppt.payment_code}`;
+        const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(checkinLink)}`;
+
+        try {
+            await bot.telegram.sendPhoto(
+                userId,
+                qrCodeUrl,
+                { caption: 'Vui lòng đưa mã QR này cho lễ tân để check-in khi đến phòng khám' }
+            );
+        } catch (err) {
+            console.error('❌ Lỗi khi gửi ảnh QR check-in qua Telegram:', err.message);
+        }
+
         // Clear session
         clearSession(userId);
 

@@ -348,8 +348,19 @@ const appointmentService = {
 
       console.log(`⏱️ Reminder Job: Tìm thấy ${pendingList.length} lịch hẹn chờ thanh toán cần nhắc nhở.`);
 
+      const paymentService = require('./paymentService');
+
       for (const appt of pendingList) {
         const userId = appt.user_id;
+
+        // Calculate remaining minutes dynamically (timeout is 15 minutes)
+        const createdAt = new Date(appt.created_at);
+        const elapsedMs = new Date() - createdAt;
+        const totalTimeoutMs = 15 * 60 * 1000; // 15 minutes
+        const remainingMs = totalTimeoutMs - elapsedMs;
+        const remainingMinutes = Math.max(1, Math.ceil(remainingMs / (60 * 1000)));
+
+        const qrUrl = paymentService.generateQRUrl(appt.deposit_amount, appt.payment_code);
 
         // Check if user is a new user (0 completed appointments)
         const completedCountRes = await db.query(`
@@ -376,8 +387,8 @@ const appointmentService = {
               `📅 Thời gian: <b>${appt.booking_time} ngày ${appt.booking_date}</b>\n` +
               `💵 Số tiền cọc cần đóng: <b>${new Intl.NumberFormat('vi-VN').format(appt.deposit_amount)}đ</b>\n\n` +
               `🎁 <b>ĐẶC BIỆT DÀNH CHO BẠN:</b>\n` +
-              `Do bạn là khách hàng mới đặt lịch lần đầu, nếu bạn hoàn tất thanh toán cọc trong vòng 5 phút tới, hệ thống sẽ <b>tặng ngay +${rewardVal} vào ví tích điểm</b> của bạn sau khi cọc thành công!\n\n` +
-              `👉 Vui lòng thanh toán theo thông tin chuyển khoản đã nhận để giữ chỗ. Quá 15 phút từ lúc đặt, lịch hẹn sẽ tự động bị hủy để nhường chỗ cho bệnh nhân khác.`;
+              `Do bạn là khách hàng mới đặt lịch lần đầu, nếu bạn hoàn tất thanh toán cọc trong vòng <b>${remainingMinutes} phút tới</b>, hệ thống sẽ <b>tặng ngay +${rewardVal} vào ví tích điểm</b> của bạn sau khi cọc thành công!\n\n` +
+              `👉 Vui lòng quét mã QR chuyển khoản đính kèm để giữ chỗ. Quá 15 phút từ lúc đặt (chỉ còn lại <b>${remainingMinutes} phút</b>), lịch hẹn sẽ tự động bị hủy để nhường chỗ cho bệnh nhân khác.`;
           }
         }
 
@@ -388,18 +399,24 @@ const appointmentService = {
             `🩺 Dịch vụ: <b>${appt.package_name}</b>\n` +
             `📅 Thời gian: <b>${appt.booking_time} ngày ${appt.booking_date}</b>\n` +
             `💵 Số tiền cọc cần đóng: <b>${new Intl.NumberFormat('vi-VN').format(appt.deposit_amount)}đ</b>\n\n` +
-            `👉 Vui lòng hoàn tất thanh toán cọc sớm để xác nhận và giữ chỗ lịch khám. Quá 15 phút từ lúc đặt, lịch hẹn sẽ tự động bị hủy.`;
+            `👉 Vui lòng quét mã QR chuyển khoản đính kèm để hoàn tất thanh toán cọc và giữ chỗ lịch khám. Quá 15 phút từ lúc đặt (chỉ còn lại <b>${remainingMinutes} phút</b>), lịch hẹn sẽ tự động bị hủy.`;
         }
 
         const isZalo = String(userId).length >= 12;
         try {
           if (isZalo) {
             const zaloBotService = require('./zaloBotService');
+            await zaloBotService.sendPhoto(String(userId), qrUrl, 'Quét mã VietQR để thanh toán cọc giữ chỗ khám');
             await zaloBotService.sendMessage(String(userId), reminderText, 'html');
           } else {
-            await bot.telegram.sendMessage(userId, reminderText, { parse_mode: 'HTML' });
+            try {
+              await bot.telegram.sendPhoto(userId, qrUrl, { caption: reminderText, parse_mode: 'HTML' });
+            } catch (photoErr) {
+              console.error(`⚠️ Gửi ảnh QR nhắc nhở thất bại cho Telegram #${appt.id}:`, photoErr.message);
+              await bot.telegram.sendMessage(userId, reminderText, { parse_mode: 'HTML' });
+            }
           }
-          console.log(`✉️ Đã gửi tin nhắn nhắc nhở cọc lịch hẹn #${appt.id} thành công cho khách hàng ${userId}`);
+          console.log(`✉️ Đã gửi tin nhắn nhắc nhở cọc kèm QR cho lịch hẹn #${appt.id} thành công cho khách hàng ${userId}`);
         } catch (err) {
           console.error(`❌ Lỗi khi gửi tin nhắc nhở cọc lịch hẹn #${appt.id} cho khách hàng:`, err.message);
         }
