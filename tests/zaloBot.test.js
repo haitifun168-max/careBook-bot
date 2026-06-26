@@ -886,13 +886,13 @@ test.describe('Zalo Chatbot Integration Tests', () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         assert.ok(lastFetchCall.options.body.text.includes('Số điện thoại không hợp lệ'));
 
-        // 9. Enter valid phone "0912345678"
+        // 9. Enter valid phone "0912345678*"
         await originalFetch(`${baseUrl}/webhook/zalo`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Bot-Api-Secret-Token': 'test_zalo_secret_token_123' },
             body: JSON.stringify({
                 update_id: 8008,
-                message: { message_id: 808, chat: { id: chatId }, text: '0912345678', from: { id: chatId } }
+                message: { message_id: 808, chat: { id: chatId }, text: '0912345678*', from: { id: chatId } }
             })
         });
         await new Promise((resolve) => setTimeout(resolve, 50));

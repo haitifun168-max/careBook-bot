@@ -40,7 +40,7 @@ async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
         const session = zaloSessions[chatId];
         if (session && session.state) {
             if (session.state === 'WAITING_PATIENT_PHONE') {
-                await zaloBotService.sendMessage(chatId, '⚠️ Phương thức chia sẻ danh bạ/số điện thoại tự động hiện không được Zalo hỗ trợ. Vui lòng nhập trực tiếp 10 chữ số điện thoại từ bàn phím (Ví dụ: 0912345678):');
+                await zaloBotService.sendMessage(chatId, '⚠️ Phương thức chia sẻ danh bạ/số điện thoại tự động hiện không được Zalo hỗ trợ. Vui lòng nhập trực tiếp 10 chữ số điện thoại từ bàn phím (Ví dụ: 0912345678 - Mẹo: nếu bị ẩn/lỗi, hãy thêm ký tự * ở cuối như 0912345678*):');
             } else {
                 await zaloBotService.sendMessage(chatId, '⚠️ Định dạng tin nhắn này không được hỗ trợ trong quá trình đặt lịch. Vui lòng nhập trực tiếp thông tin bằng văn bản hoặc phím số tương ứng.');
             }
@@ -447,7 +447,7 @@ async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
     // Helper to process shared contact info (business card or submit info)
     const processSharedContact = async () => {
         if (contactInfo && contactInfo.phone) {
-            let phoneInput = contactInfo.phone.replace(/[\s\-\.\+]/g, '');
+            let phoneInput = contactInfo.phone.replace(/[\s\-\.\+\*]/g, '');
             if (phoneInput.length === 9 && !phoneInput.startsWith('0') && !phoneInput.startsWith('84')) {
                 phoneInput = '0' + phoneInput;
             }
@@ -505,8 +505,8 @@ async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
         session.state = 'WAITING_PATIENT_PHONE';
 
         const phoneMsg = session.patientType === 'self' ? 
-            '📞 Vui lòng nhập <b>Số điện thoại liên hệ</b> của bạn (Ví dụ: 0912345678):' : 
-            '📞 Vui lòng nhập <b>Số điện thoại</b> liên hệ của người đi khám (Ví dụ: 0912345678):';
+            '📞 Vui lòng nhập <b>Số điện thoại liên hệ</b> của bạn (Ví dụ: 0912345678 - Mẹo: nếu bị ẩn/không gửi được, hãy nhập thêm ký tự * ở cuối như 0912345678*):' : 
+            '📞 Vui lòng nhập <b>Số điện thoại</b> liên hệ của người đi khám (Ví dụ: 0912345678 - Mẹo: nếu bị ẩn/không gửi được, hãy nhập thêm ký tự * ở cuối như 0912345678*):';
         await zaloBotService.sendMessage(chatId, phoneMsg, 'html');
         return;
     }
@@ -516,8 +516,8 @@ async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
         const isShared = await processSharedContact();
         if (isShared) return;
 
-        // Clean all spaces, dashes, dots, and +
-        let phoneInput = cleanText.replace(/[\s\-\.\+]/g, '');
+        // Clean all spaces, dashes, dots, +, and *
+        let phoneInput = cleanText.replace(/[\s\-\.\+\*]/g, '');
 
         // Auto-prepend '0' if user entered a 9-digit number not starting with '0'
         if (phoneInput.length === 9 && !phoneInput.startsWith('0') && !phoneInput.startsWith('84')) {
@@ -527,7 +527,7 @@ async function handleZaloMessage(chatId, text, fromUser, contactInfo = {}) {
         // Match 10 to 11 digits format
         const phoneRegex = /^(0|84)\d{9,10}$/;
         if (!phoneRegex.test(phoneInput)) {
-            return zaloBotService.sendMessage(chatId, '❌ Số điện thoại không hợp lệ. Vui lòng nhập đúng 10 số (Ví dụ: 0912345678):');
+            return zaloBotService.sendMessage(chatId, '❌ Số điện thoại không hợp lệ. Vui lòng nhập đúng 10 số (Mẹo: nếu bị ẩn, hãy thêm ký tự * ở cuối như 0912345678*):');
         }
 
         let phone = phoneInput;
