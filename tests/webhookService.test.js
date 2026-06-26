@@ -469,4 +469,133 @@ test.describe('WebhookService and Express API Tests', () => {
         assert.strictEqual(res.status, 400);
         assert.ok((await res.text()).includes('hết hạn hoặc không hợp lệ'));
     });
+
+    test.describe('Admin Reporting and Marketing Campaigns API', () => {
+        const sessionId = 'admin-test-session-999';
+
+        test.beforeEach(async () => {
+            // Insert admin session
+            await db.query(`
+                INSERT INTO sessions (session_id, username, role)
+                VALUES ($1, 'admin', 'admin')
+            `, [sessionId]);
+            // Clear marketing campaigns and usages
+            await db.query('DELETE FROM campaign_usages');
+            await db.query('DELETE FROM marketing_campaigns');
+        });
+
+        test.afterEach(async () => {
+            await db.query('DELETE FROM campaign_usages');
+            await db.query('DELETE FROM marketing_campaigns');
+        });
+
+        test('GET /admin/api/reports/customers - returns customer reporting data', async () => {
+            const res = await fetch(`${baseUrl}/admin/api/reports/customers`, {
+                headers: { 'Cookie': `session_id=${sessionId}` }
+            });
+            assert.strictEqual(res.status, 200);
+            const data = await res.json();
+            assert.strictEqual(data.success, true);
+            assert.ok(data.stats);
+            assert.strictEqual(typeof data.stats.totalUsers, 'number');
+            assert.ok(Array.isArray(data.customers));
+        });
+
+        test('POST, PUT, and PATCH /admin/api/campaigns - campaign lifecycle management', async () => {
+            // 1. Create campaign
+            const createRes = await fetch(`${baseUrl}/admin/api/campaigns`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Cookie': `session_id=${sessionId}`
+                },
+                body: JSON.stringify({
+                    name: 'Test Attract Campaign',
+                    type: 'attract',
+                    reward_type: 'cashback',
+                    value: 50000,
+                    budget_limit: 1000000
+                })
+            });
+            assert.strictEqual(createRes.status, 200);
+            const createData = await createRes.json();
+            assert.strictEqual(createData.success, true);
+            const campaignId = createData.campaign.id;
+            assert.ok(campaignId);
+
+            // Verify validations on POST
+            const createFailRes = await fetch(`${baseUrl}/admin/api/campaigns`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Cookie': `session_id=${sessionId}`
+                },
+                body: JSON.stringify({
+                    name: '',
+                    type: 'invalid',
+                    reward_type: 'cashback',
+                    value: -10,
+                    budget_limit: 100
+                })
+            });
+            assert.strictEqual(createFailRes.status, 400);
+
+            // 2. Update campaign
+            const updateRes = await fetch(`${baseUrl}/admin/api/campaigns/${campaignId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Cookie': `session_id=${sessionId}`
+                },
+                body: JSON.stringify({
+                    name: 'Updated Attract Campaign',
+                    budget_limit: 2000000
+                })
+            });
+            assert.strictEqual(updateRes.status, 200);
+            const updateData = await updateRes.json();
+            assert.strictEqual(updateData.success, true);
+            assert.strictEqual(updateData.campaign.name, 'Updated Attract Campaign');
+            assert.strictEqual(parseInt(updateData.campaign.budget_limit), 2000000);
+
+            // Verify budget limit validation below spent (0 spent currently)
+            const updateFailRes = await fetch(`${baseUrl}/admin/api/campaigns/${campaignId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Cookie': `session_id=${sessionId}`
+                },
+                body: JSON.stringify({
+                    name: 'Updated Attract Campaign',
+                    budget_limit: -100
+                })
+            });
+            assert.strictEqual(updateFailRes.status, 400);
+
+            // 3. Toggle campaign status
+            const patchRes = await fetch(`${baseUrl}/admin/api/campaigns/${campaignId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Cookie': `session_id=${sessionId}`
+                },
+                body: JSON.stringify({ is_active: 0 })
+            });
+            assert.strictEqual(patchRes.status, 200);
+            const patchData = await patchRes.json();
+            assert.strictEqual(patchData.success, true);
+            assert.strictEqual(patchData.campaign.is_active, 0);
+        });
+
+        test('GET /admin/api/campaigns/usages - returns campaign usages list', async () => {
+            const res = await fetch(`${baseUrl}/admin/api/campaigns/usages`, {
+                headers: { 'Cookie': `session_id=${sessionId}` }
+            });
+            assert.strictEqual(res.status, 200);
+            const data = await res.json();
+            assert.strictEqual(data.success, true);
+            assert.ok(Array.isArray(data.usages));
+        });
+    });
 });
+

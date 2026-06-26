@@ -488,6 +488,7 @@
             <li class="menu-item" id="menu-appointments"><a onclick="switchPanel('appointments')">📅 Lịch hẹn khám</a></li>
             <li class="menu-item admin-only-section" id="menu-services"><a onclick="switchPanel('services')">🩺 Dịch vụ & Gói khám</a></li>
             <li class="menu-item admin-only-section" id="menu-campaigns"><a onclick="switchPanel('campaigns')">📢 Quản lý Chiến dịch</a></li>
+            <li class="menu-item admin-only-section" id="menu-customers"><a onclick="switchPanel('customers')">👥 Thống kê Bệnh nhân</a></li>
             <li class="menu-item admin-only-section" id="menu-staff"><a onclick="switchPanel('staff')">👥 Nhân viên phòng khám</a></li>
         </ul>
         <div class="sidebar-footer">
@@ -689,7 +690,8 @@
                     <h3 class="card-title">Danh sách Chiến dịch & Ngân sách</h3>
                     <div class="action-flex">
                         <button class="btn btn-primary" onclick="loadCampaigns()">🔄 Tải lại</button>
-                        <button class="btn btn-success" onclick="exportCampaigns()">📥 Xuất Excel</button>
+                        <button class="btn btn-success" onclick="openCampaignModal()">➕ Tạo chiến dịch</button>
+                        <button class="btn btn-secondary" onclick="exportCampaigns()">📥 Xuất Excel</button>
                     </div>
                 </div>
                 <div class="table-responsive">
@@ -704,10 +706,76 @@
                                 <th>Đã giải ngân</th>
                                 <th>Tiến trình</th>
                                 <th>Trạng thái</th>
+                                <th>Hành động</th>
                             </tr>
                         </thead>
                         <tbody id="campaigns-list-table">
                             <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Đang tải danh sách chiến dịch...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- CAMPAIGN USAGES -->
+            <div class="card" style="margin-top: 24px;">
+                <div class="card-header">
+                    <h3 class="card-title">Nhật ký Giải ngân Khuyến mãi (Giao dịch ví)</h3>
+                    <div class="action-flex">
+                        <button class="btn btn-primary" onclick="loadCampaignUsages()">🔄 Tải lại</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Chiến dịch</th>
+                                <th>Người nhận</th>
+                                <th>Zalo/Telegram ID</th>
+                                <th>Mức ưu đãi</th>
+                                <th>Dịch vụ sử dụng</th>
+                                <th>Ngày hẹn khám</th>
+                                <th>Thời gian nhận</th>
+                            </tr>
+                        </thead>
+                        <tbody id="campaign-usages-list-table">
+                            <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Đang tải nhật ký giải ngân...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE 6: CUSTOMERS -->
+        <div id="panel-customers" class="panel-page">
+            <!-- Customer KPIs -->
+            <div class="kpi-grid" id="customer-kpis-grid">
+                <!-- Dynamically populated -->
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Danh sách Bệnh nhân</h3>
+                    <div class="action-flex">
+                        <input type="text" id="customer-search-input" class="search-input" placeholder="Tìm kiếm tên hoặc SĐT..." oninput="filterCustomers()" style="padding: 6px 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: var(--text-main);">
+                        <button class="btn btn-primary" onclick="loadCustomers()">🔄 Tải lại</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Zalo/Telegram ID</th>
+                                <th>Họ tên</th>
+                                <th>Username</th>
+                                <th>Số dư ví</th>
+                                <th>Tổng lịch hẹn</th>
+                                <th>Ngày tham gia</th>
+                                <th>Lịch đặt cuối</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customers-list-table">
+                            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Đang tải danh sách bệnh nhân...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -768,6 +836,54 @@
 
                 <div class="form-actions">
                     <button type="button" class="btn btn-danger" onclick="closeProductModal()">Hủy bỏ</button>
+                    <button type="submit" class="btn btn-success">Lưu lại</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD/EDIT CAMPAIGN -->
+    <div class="modal" id="campaign-modal">
+        <div class="modal-content" style="background: var(--bg-card); color: var(--text-main); border: 1px solid rgba(255,255,255,0.05); max-width: 500px; margin: 10% auto; padding: 20px; border-radius: 8px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 class="modal-title" id="campaign-modal-title" style="margin: 0;">Thêm chiến dịch khuyến mại</h3>
+                <button class="btn-close" onclick="closeCampaignModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <form id="campaign-form" onsubmit="saveCampaign(event)">
+                <input type="hidden" id="campaign-id">
+                
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="campaign-name" style="display: block; margin-bottom: 6px; font-weight: 500;">Tên chiến dịch</label>
+                    <input type="text" id="campaign-name" class="form-input" placeholder="Ví dụ: Chiến dịch Thu hút khách mới" required style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: var(--text-main); border-radius: 4px;">
+                </div>
+
+                <div class="form-group" id="campaign-type-group" style="margin-bottom: 16px;">
+                    <label for="campaign-type" style="display: block; margin-bottom: 6px; font-weight: 500;">Loại đối tượng chiến dịch</label>
+                    <select id="campaign-type" class="form-input" style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: var(--text-main); border-radius: 4px;">
+                        <option value="attract">Thu hút khách mới (chưa khám lần nào)</option>
+                        <option value="retain">Tri ân khách cũ (tái khám cọc thành công)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="campaign-reward-type-group" style="margin-bottom: 16px;">
+                    <label for="campaign-reward-type" style="display: block; margin-bottom: 6px; font-weight: 500;">Loại ưu đãi</label>
+                    <select id="campaign-reward-type" class="form-input" style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: var(--text-main); border-radius: 4px;">
+                        <option value="cashback">Hoàn tiền vào ví tích điểm</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="campaign-value-group" style="margin-bottom: 16px;">
+                    <label for="campaign-value" style="display: block; margin-bottom: 6px; font-weight: 500;">Mức thưởng cọc / hoàn tiền (đ)</label>
+                    <input type="number" id="campaign-value" class="form-input" placeholder="Ví dụ: 50000" required style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: var(--text-main); border-radius: 4px;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="campaign-budget-limit" style="display: block; margin-bottom: 6px; font-weight: 500;">Ngân sách giới hạn chiến dịch (đ)</label>
+                    <input type="number" id="campaign-budget-limit" class="form-input" placeholder="Ví dụ: 10000000" required style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: var(--text-main); border-radius: 4px;">
+                </div>
+
+                <div class="form-actions" style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 16px;">
+                    <button type="button" class="btn btn-danger" onclick="closeCampaignModal()">Hủy bỏ</button>
                     <button type="submit" class="btn btn-success">Lưu lại</button>
                 </div>
             </form>
@@ -840,6 +956,8 @@
         let appointments = [];
         let categories = [];
         let products = [];
+        let campaigns = [];
+        let customers = [];
 
         // Formatting utilities
         function formatMoney(amount) {
@@ -868,24 +986,27 @@
                 appointments: 'Lịch trình khám bệnh',
                 services: 'Danh mục dịch vụ y tế',
                 staff: 'Nhân viên phòng khám',
-                campaigns: 'Quản lý Chiến dịch & Ngân sách'
+                campaigns: 'Quản lý Chiến dịch & Ngân sách',
+                customers: 'Thống kê & Quản lý Bệnh nhân'
             };
             const subtitleMap = {
                 overview: 'Thống kê hoạt động của phòng khám hôm nay',
                 appointments: 'Theo dõi, hủy và xác nhận check-in cho bệnh nhân',
                 services: 'Quản trị các gói chăm sóc răng miệng & tiểu phẫu',
                 staff: 'Tạo tài khoản và phân quyền nhân sự phòng khám',
-                campaigns: 'Theo dõi ngân sách khuyến mãi, hiệu quả marketing (CAC, Conversion)'
+                campaigns: 'Theo dõi ngân sách khuyến mãi, hiệu quả marketing (CAC, Conversion)',
+                customers: 'Theo dõi chỉ số giữ chân, tần suất khám và danh sách khách hàng'
             };
             
-            document.getElementById('page-title').textContent = titleMap[panelName];
-            document.getElementById('page-subtitle').textContent = subtitleMap[panelName];
+            document.getElementById('page-title').textContent = titleMap[panelName] || '';
+            document.getElementById('page-subtitle').textContent = subtitleMap[panelName] || '';
 
             if (panelName === 'overview') loadData();
             if (panelName === 'appointments') loadAppointments();
             if (panelName === 'services') loadServices();
             if (panelName === 'staff') loadStaff();
-            if (panelName === 'campaigns') loadCampaigns();
+            if (panelName === 'campaigns') { loadCampaigns(); loadCampaignUsages(); }
+            if (panelName === 'customers') loadCustomers();
         }
 
         async function loadCampaigns() {
@@ -894,6 +1015,7 @@
                 const res = await response.json();
                 
                 if (response.ok && res.success) {
+                    campaigns = res.campaigns;
                     // Render Campaign KPIs
                     const kpisGrid = document.getElementById('campaign-kpis-grid');
                     kpisGrid.innerHTML = `
@@ -931,7 +1053,7 @@
                     const tbody = document.getElementById('campaigns-list-table');
                     tbody.innerHTML = '';
 
-                    res.campaigns.forEach(c => {
+                    campaigns.forEach(c => {
                         const percent = c.budget_limit > 0 ? Math.min(100, Math.round((c.budget_spent / c.budget_limit) * 100)) : 0;
                         const statusBadge = c.is_active ? 
                             '<span class="badge badge-completed">Hoạt động</span>' : 
@@ -956,6 +1078,14 @@
                                     </div>
                                 </td>
                                 <td>${statusBadge}</td>
+                                <td>
+                                    <div class="action-flex">
+                                        <button class="btn btn-primary" onclick="openCampaignModal(${c.id})">📝 Sửa</button>
+                                        <button class="btn ${c.is_active ? 'btn-danger' : 'btn-success'}" onclick="toggleCampaignStatus(${c.id}, ${c.is_active})">
+                                            ${c.is_active ? '⏸️ Dừng' : '▶️ Bật'}
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                         `;
                     });
@@ -963,6 +1093,221 @@
             } catch (err) {
                 console.error('Error fetching campaigns:', err);
             }
+        }
+
+        async function loadCampaignUsages() {
+            try {
+                const response = await fetch('/admin/api/campaigns/usages');
+                const res = await response.json();
+                if (response.ok && res.success) {
+                    const tbody = document.getElementById('campaign-usages-list-table');
+                    tbody.innerHTML = '';
+                    if (res.usages.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Chưa có lịch sử giải ngân nào.</td></tr>';
+                        return;
+                    }
+                    res.usages.forEach(cu => {
+                        const typeText = cu.campaign_type === 'attract' ? 'Thu hút khách mới' : 'Gìn giữ khách cũ';
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>#${cu.id}</td>
+                                <td><b>${cu.campaign_name}</b> <br/><small class="badge badge-confirmed" style="padding: 2px 6px; font-size: 0.75rem;">${typeText}</small></td>
+                                <td><b>${cu.user_name || 'Khách hàng'}</b></td>
+                                <td><code>${cu.user_id}</code></td>
+                                <td><b>+${formatMoney(cu.amount_used)}</b></td>
+                                <td>${cu.package_name} (Lịch #${cu.appointment_id})</td>
+                                <td>${cu.booking_date}</td>
+                                <td>${formatDateTime(cu.created_at)}</td>
+                            </tr>
+                        `;
+                    });
+                }
+            } catch (err) {
+                console.error('Error fetching campaign usages:', err);
+            }
+        }
+
+        function openCampaignModal(campaignId = null) {
+            const form = document.getElementById('campaign-form');
+            form.reset();
+            
+            if (campaignId) {
+                const c = campaigns.find(x => x.id === campaignId);
+                if (!c) return;
+                
+                document.getElementById('campaign-modal-title').textContent = 'Chỉnh sửa chiến dịch #' + c.id;
+                document.getElementById('campaign-id').value = c.id;
+                document.getElementById('campaign-name').value = c.name;
+                document.getElementById('campaign-budget-limit').value = c.budget_limit;
+                
+                // Hide non-editable fields on Edit
+                document.getElementById('campaign-type-group').style.display = 'none';
+                document.getElementById('campaign-reward-type-group').style.display = 'none';
+                document.getElementById('campaign-value-group').style.display = 'none';
+            } else {
+                document.getElementById('campaign-modal-title').textContent = 'Thêm chiến dịch khuyến mại';
+                document.getElementById('campaign-id').value = '';
+                
+                // Show editable fields on Create
+                document.getElementById('campaign-type-group').style.display = 'block';
+                document.getElementById('campaign-reward-type-group').style.display = 'block';
+                document.getElementById('campaign-value-group').style.display = 'block';
+            }
+            
+            document.getElementById('campaign-modal').style.display = 'flex';
+        }
+
+        function closeCampaignModal() {
+            document.getElementById('campaign-modal').style.display = 'none';
+        }
+
+        async function saveCampaign(event) {
+            event.preventDefault();
+            const id = document.getElementById('campaign-id').value;
+            const name = document.getElementById('campaign-name').value;
+            const budget_limit = document.getElementById('campaign-budget-limit').value;
+
+            let url = '/admin/api/campaigns';
+            let method = 'POST';
+            let body = {};
+
+            if (id) {
+                url = `/admin/api/campaigns/${id}`;
+                method = 'PUT';
+                body = { name, budget_limit };
+            } else {
+                const type = document.getElementById('campaign-type').value;
+                const reward_type = document.getElementById('campaign-reward-type').value;
+                const value = document.getElementById('campaign-value').value;
+                body = { name, type, reward_type, value, budget_limit };
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const res = await response.json();
+
+                if (response.ok && res.success) {
+                    alert('Lưu chiến dịch thành công!');
+                    closeCampaignModal();
+                    loadCampaigns();
+                } else {
+                    alert('Lỗi: ' + res.error);
+                }
+            } catch (err) {
+                alert('Không thể kết nối đến máy chủ.');
+            }
+        }
+
+        async function toggleCampaignStatus(id, currentActive) {
+            const is_active = currentActive ? 0 : 1;
+            const confirmMsg = is_active ? 'Bật lại chiến dịch khuyến mãi này?' : 'Xác nhận dừng chiến dịch khuyến mãi này?';
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                const response = await fetch(`/admin/api/campaigns/${id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active })
+                });
+                const res = await response.json();
+
+                if (response.ok && res.success) {
+                    alert(is_active ? 'Đã kích hoạt chiến dịch!' : 'Đã dừng chiến dịch!');
+                    loadCampaigns();
+                } else {
+                    alert('Lỗi: ' + res.error);
+                }
+            } catch (err) {
+                alert('Không thể cập nhật trạng thái.');
+            }
+        }
+
+        async function loadCustomers() {
+            try {
+                const response = await fetch('/admin/api/reports/customers');
+                const res = await response.json();
+                if (response.ok && res.success) {
+                    customers = res.customers;
+                    
+                    // Render customer KPIs
+                    const kpisGrid = document.getElementById('customer-kpis-grid');
+                    kpisGrid.innerHTML = `
+                        <div class="kpi-card">
+                            <div class="kpi-info">
+                                <h3>Tổng số khách hàng</h3>
+                                <p>${res.stats.totalUsers}</p>
+                            </div>
+                            <span class="kpi-icon">👥</span>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-info">
+                                <h3>Khách mới / Quay lại</h3>
+                                <p>${res.stats.newUsers} / ${res.stats.returningUsers}</p>
+                            </div>
+                            <span class="kpi-icon">👤</span>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-info">
+                                <h3>Tỷ lệ quay lại</h3>
+                                <p>${res.stats.retentionRate}%</p>
+                            </div>
+                            <span class="kpi-icon">📈</span>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-info">
+                                <h3>Số lịch hẹn TB/Khách</h3>
+                                <p>${res.stats.avgAppointments}</p>
+                            </div>
+                            <span class="kpi-icon">📅</span>
+                        </div>
+                    `;
+                    
+                    renderCustomersList(customers);
+                }
+            } catch (err) {
+                console.error('Error fetching customers report:', err);
+            }
+        }
+
+        function renderCustomersList(list) {
+            const tbody = document.getElementById('customers-list-table');
+            tbody.innerHTML = '';
+            
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Không có bệnh nhân nào khớp bộ lọc.</td></tr>';
+                return;
+            }
+            
+            list.forEach(cust => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td><code>${cust.telegram_id}</code></td>
+                        <td><b>${cust.full_name || 'N/A'}</b></td>
+                        <td>${cust.username ? '@' + cust.username : '-'}</td>
+                        <td><b>${formatMoney(cust.balance)}</b></td>
+                        <td><span class="badge badge-completed">${cust.completed_appointments_count}</span> lịch hẹn</td>
+                        <td>${formatDateTime(cust.created_at)}</td>
+                        <td>${formatDateTime(cust.last_booking_time)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function filterCustomers() {
+            const searchVal = document.getElementById('customer-search-input').value.toLowerCase().trim();
+            let filtered = customers;
+            if (searchVal) {
+                filtered = filtered.filter(cust => 
+                    (cust.full_name && cust.full_name.toLowerCase().includes(searchVal)) ||
+                    cust.telegram_id.includes(searchVal) ||
+                    (cust.username && cust.username.toLowerCase().includes(searchVal))
+                );
+            }
+            renderCustomersList(filtered);
         }
 
         // Startup actions

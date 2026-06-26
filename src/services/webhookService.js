@@ -760,7 +760,201 @@ function startWebhookServer(bot) {
                 }
             });
         } catch (err) {
-            console.error('API Campaigns Error:', err.message);
+            console.error('API Campaigns Stats Error:', err.message);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    });
+
+    // 1c. Get customer statistics & listing
+    app.get('/admin/api/reports/customers', checkRole(['admin']), async (req, res) => {
+        try {
+            // Get total users, returning users, average appointments
+            const summaryRes = await db.query(`
+                SELECT 
+                    (SELECT COUNT(*) FROM users) as total_users,
+                    (
+                        SELECT COUNT(*) FROM (
+                            SELECT user_id FROM appointments 
+                            WHERE status IN ('confirmed', 'completed') 
+                            GROUP BY user_id HAVING COUNT(*) >= 2
+                        ) t
+                    ) as returning_users,
+                    (
+                        SELECT COALESCE(AVG(appt_count), 0) FROM (
+                            SELECT COUNT(*) as appt_count FROM appointments 
+                            WHERE status IN ('confirmed', 'completed') 
+                            GROUP BY user_id
+                        ) t
+                    ) as avg_appointments_per_user
+            `);
+
+            const totalUsers = parseInt(summaryRes.rows[0].total_users) || 0;
+            const returningUsers = parseInt(summaryRes.rows[0].returning_users) || 0;
+            const newUsers = Math.max(0, totalUsers - returningUsers);
+            const retentionRate = totalUsers > 0 ? parseFloat(((returningUsers / totalUsers) * 100).toFixed(1)) : 0;
+            const avgAppointments = parseFloat(parseFloat(summaryRes.rows[0].avg_appointments_per_user).toFixed(1)) || 0;
+
+            // Get all customers with their details and booking counts
+            const customersRes = await db.query(`
+                SELECT 
+                    u.telegram_id, 
+                    u.username, 
+                    u.full_name, 
+                    u.balance, 
+                    u.created_at,
+                    COUNT(CASE WHEN a.status IN ('confirmed', 'completed') THEN 1 END) as completed_appointments_count,
+                    MAX(a.created_at) as last_booking_time
+                FROM users u
+                LEFT JOIN appointments a ON u.telegram_id = a.user_id
+                GROUP BY u.telegram_id, u.username, u.full_name, u.balance, u.created_at
+                ORDER BY last_booking_time DESC NULLS LAST, u.created_at DESC
+            `);
+
+            res.json({
+                success: true,
+                stats: {
+                    totalUsers,
+                    newUsers,
+                    returningUsers,
+                    retentionRate,
+                    avgAppointments
+                },
+                customers: customersRes.rows
+            });
+        } catch (err) {
+            console.error('API Customers Stats Error:', err.message);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    });
+
+    // 1d. Create a marketing campaign
+    app.post('/admin/api/campaigns', checkRole(['admin']), async (req, res) => {
+        try {
+            const { name, type, reward_type, value, budget_limit } = req.body;
+
+            if (!name || name.trim() === '') {
+                return res.status(400).json({ error: 'Tên chiến dịch không được để trống' });
+            }
+            if (type !== 'attract' && type !== 'retain') {
+                return res.status(400).json({ error: 'Loại chiến dịch không hợp lệ' });
+            }
+            if (reward_type !== 'cashback') {
+                return res.status(400).json({ error: 'Loại ưu đãi không hợp lệ' });
+            }
+            const rewardVal = parseInt(value);
+            const budgetLim = parseInt(budget_limit);
+
+            if (isNaN(rewardVal) || rewardVal <= 0) {
+                return res.status(400).json({ error: 'Giá trị ưu đãi phải lớn hơn 0' });
+            }
+            if (isNaN(budgetLim) || budgetLim < rewardVal) {
+                return res.status(400).json({ error: 'Hạn mức ngân sách phải lớn hơn hoặc bằng giá trị ưu đãi' });
+            }
+
+            const insertRes = await db.query(
+                `INSERT INTO marketing_campaigns (name, type, reward_type, value, budget_limit, budget_spent, is_active)
+                 VALUES ($1, $2, $3, $4, $5, 0, 1) RETURNING *`,
+                [name.trim(), type, reward_type, rewardVal, budgetLim]
+            );
+
+            res.json({ success: true, campaign: insertRes.rows[0] });
+        } catch (err) {
+            console.error('API Create Campaign Error:', err.message);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    });
+
+    // 1e. Update a marketing campaign
+    app.put('/admin/api/campaigns/:id', checkRole(['admin']), async (req, res) => {
+        try {
+            const campaignId = parseInt(req.params.id);
+            const { name, budget_limit } = req.body;
+
+            if (!name || name.trim() === '') {
+                return res.status(400).json({ error: 'Tên chiến dịch không được để trống' });
+            }
+
+            const budgetLim = parseInt(budget_limit);
+            if (isNaN(budgetLim) || budgetLim <= 0) {
+                return res.status(400).json({ error: 'Hạn mức ngân sách phải lớn hơn 0' });
+            }
+
+            // Check if campaign exists and check current spent
+            const campaignRes = await db.query('SELECT * FROM marketing_campaigns WHERE id = $1', [campaignId]);
+            if (campaignRes.rows.length === 0) {
+                return res.status(404).json({ error: 'Không tìm thấy chiến dịch' });
+            }
+
+            const campaign = campaignRes.rows[0];
+            if (budgetLim < parseInt(campaign.budget_spent)) {
+                return res.status(400).json({ error: `Ngân sách mới không được thấp hơn số tiền đã giải ngân (${new Intl.NumberFormat('vi-VN').format(campaign.budget_spent)}đ)` });
+            }
+
+            const updateRes = await db.query(
+                `UPDATE marketing_campaigns 
+                 SET name = $1, budget_limit = $2 
+                 WHERE id = $3 RETURNING *`,
+                [name.trim(), budgetLim, campaignId]
+            );
+
+            res.json({ success: true, campaign: updateRes.rows[0] });
+        } catch (err) {
+            console.error('API Update Campaign Error:', err.message);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    });
+
+    // 1f. Toggle marketing campaign status (is_active = 0 or 1)
+    app.patch('/admin/api/campaigns/:id/status', checkRole(['admin']), async (req, res) => {
+        try {
+            const campaignId = parseInt(req.params.id);
+            const { is_active } = req.body;
+
+            const activeStatus = parseInt(is_active) === 1 ? 1 : 0;
+
+            const checkCampaign = await db.query('SELECT * FROM marketing_campaigns WHERE id = $1', [campaignId]);
+            if (checkCampaign.rows.length === 0) {
+                return res.status(404).json({ error: 'Không tìm thấy chiến dịch' });
+            }
+
+            const updateRes = await db.query(
+                'UPDATE marketing_campaigns SET is_active = $1 WHERE id = $2 RETURNING *',
+                [activeStatus, campaignId]
+            );
+
+            res.json({ success: true, campaign: updateRes.rows[0] });
+        } catch (err) {
+            console.error('API Toggle Campaign Status Error:', err.message);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    });
+
+    // 1g. Get campaign usages list (disbursement transactions log)
+    app.get('/admin/api/campaigns/usages', checkRole(['admin']), async (req, res) => {
+        try {
+            const usagesRes = await db.query(`
+                SELECT 
+                    cu.id, 
+                    mc.name as campaign_name, 
+                    mc.type as campaign_type, 
+                    cu.amount_used, 
+                    cu.user_id, 
+                    u.full_name as user_name, 
+                    cu.appointment_id, 
+                    p.name as package_name, 
+                    a.booking_date, 
+                    cu.created_at
+                FROM campaign_usages cu
+                JOIN marketing_campaigns mc ON cu.campaign_id = mc.id
+                JOIN appointments a ON cu.appointment_id = a.id
+                JOIN products p ON a.package_id = p.id
+                LEFT JOIN users u ON cu.user_id = u.telegram_id
+                ORDER BY cu.created_at DESC
+            `);
+
+            res.json({ success: true, usages: usagesRes.rows });
+        } catch (err) {
+            console.error('API Campaign Usages Error:', err.message);
             res.status(500).json({ error: 'Internal Server Error' });
         }
     });

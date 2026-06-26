@@ -154,6 +154,12 @@ const initDb = async () => {
       );
     `);
 
+    // Create database indexes for reporting optimization
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_appointments_user_status ON appointments(user_id, status);
+      CREATE INDEX IF NOT EXISTS idx_campaign_usages_campaign_id ON campaign_usages(campaign_id);
+    `);
+
     // Seed categories
     const catCountRes = await pool.query('SELECT COUNT(*) as c FROM categories');
     if (parseInt(catCountRes.rows[0].c) === 0) {
